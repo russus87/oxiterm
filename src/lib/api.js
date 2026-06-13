@@ -30,6 +30,23 @@ export const termRidimensiona = (id, colonne, righe) =>
 export const termChiudi = (id) => invoke("term_chiudi", { id });
 export const termLogAvvia = (id, percorso) => invoke("term_log_avvia", { id, percorso });
 export const termLogFerma = (id) => invoke("term_log_ferma", { id });
+export const termRecAvvia = (id, percorso) => invoke("term_rec_avvia", { id, percorso });
+export const termRecFerma = (id) => invoke("term_rec_ferma", { id });
+export const leggiFile = (percorso) => invoke("leggi_file", { percorso });
+
+// ---- Chiavi SSH ----
+export const generaChiave = (nome, commento) =>
+  invoke("genera_chiave", { nome, commento });
+export const listaChiavi = () => invoke("lista_chiavi");
+export const copiaChiave = (id, pubblica) => invoke("copia_chiave", { id, pubblica });
+
+// ---- Vault cifrato ----
+export const vaultStato = () => invoke("vault_stato");
+export const vaultSblocca = (master) => invoke("vault_sblocca", { master });
+export const vaultBlocca = () => invoke("vault_blocca");
+export const vaultSalvaPassword = (id, password) =>
+  invoke("vault_salva_password", { id, password });
+export const vaultLeggiPassword = (id) => invoke("vault_leggi_password", { id });
 
 // ---- VNC (sperimentale) ----
 export const apriVnc = (id, host, porta, password) =>
@@ -63,6 +80,13 @@ export const sftpElimina = (id, percorso, dir) =>
   invoke("sftp_elimina", { id, percorso, dir });
 export const sftpRinomina = (id, da, a) => invoke("sftp_rinomina", { id, da, a });
 export const sftpApriEditor = (id, remoto) => invoke("sftp_apri_editor", { id, remoto });
+export const sftpLeggiTesto = (id, remoto) => invoke("sftp_leggi_testo", { id, remoto });
+export const sftpScriviTesto = (id, remoto, contenuto) =>
+  invoke("sftp_scrivi_testo", { id, remoto, contenuto });
+export const sftpCaricaCartella = (id, locale, remoto) =>
+  invoke("sftp_carica_cartella", { id, locale, remoto });
+export const sftpScaricaCartella = (id, remoto, locale) =>
+  invoke("sftp_scarica_cartella", { id, remoto, locale });
 export const sftpCaricaCoda = (id, trasferimento, locale, remoto) =>
   invoke("sftp_carica_coda", { id, trasferimento, locale, remoto });
 export const sftpScaricaCoda = (id, trasferimento, remoto, locale) =>

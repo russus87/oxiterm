@@ -29,7 +29,9 @@
       baud: 115200,
       gruppo: "",
       colore: "#37b24d",
+      tags: "",
       salva: true,
+      salvaVault: false,
       // VNC
       vnc_password: "",
       // Jump host (ProxyJump) — solo per SSH
@@ -233,10 +235,22 @@
       </div>
     </div>
 
+    <div class="campo">
+      <label>Tag (separati da virgola)</label>
+      <input bind:value={form.tags} placeholder="prod, web, cliente-x" />
+    </div>
+
     <div class="campo" style="display:flex;align-items:center;gap:8px">
       <input type="checkbox" bind:checked={form.salva} style="width:auto" id="salva" />
       <label for="salva" style="margin:0">Salva nella rubrica</label>
     </div>
+
+    {#if form.tipo === "ssh" && form.metodo === "password"}
+      <div class="campo" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" bind:checked={form.salvaVault} style="width:auto" id="salvaVault" />
+        <label for="salvaVault" style="margin:0">Salva la password nel vault cifrato</label>
+      </div>
+    {/if}
 
     <div class="pulsanti">
       <button onclick={onChiudi}>Annulla</button>

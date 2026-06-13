@@ -7,7 +7,7 @@
 
   const filtrate = $derived(
     sessioni.filter((s) => {
-      const t = `${s.nome} ${s.host ?? ""} ${s.utente ?? ""} ${s.gruppo ?? ""}`.toLowerCase();
+      const t = `${s.nome} ${s.host ?? ""} ${s.utente ?? ""} ${s.gruppo ?? ""} ${(s.tags ?? []).join(" ")}`.toLowerCase();
       return t.includes(query.toLowerCase());
     }),
   );

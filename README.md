@@ -65,6 +65,10 @@ git push origin v0.1.0
 - [x] Palette comandi (Ctrl+P), drag&drop + coda trasferimenti SFTP
 - [x] Jump host / ProxyJump, sincronizzazione cloud della rubrica (Git)
 - [x] Client VNC (sperimentale)
+- [x] Stato connessione, gestione chiavi SSH, editor remoto integrato
+- [x] Segnalibri SFTP, trasferimento ricorsivo, tag sessioni
+- [x] Registrazione & replay (asciicast), vault cifrato (master password)
+- [x] Test automatici del core
 
 ## Roadmap
 

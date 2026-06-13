@@ -1,7 +1,20 @@
 // Versione dell'app e changelog, mostrati nel pannello Info.
-export const VERSIONE = "0.4.0";
+export const VERSIONE = "0.5.0";
 
 export const changelog = [
+  {
+    versione: "0.5.0",
+    note: [
+      "Indicatore di stato connessione (pallino verde/giallo/rosso) per scheda",
+      "Gestione chiavi SSH: genera, elenca e copia sul server (ssh-copy-id)",
+      "Editor di testo remoto integrato (oltre all'editor di sistema)",
+      "Segnalibri SFTP e trasferimento ricorsivo di cartelle",
+      "Tag per le sessioni (ricercabili nella palette)",
+      "Registrazione e replay delle sessioni (formato asciicast)",
+      "Vault cifrato per le password salvate (master password)",
+      "Test automatici del core",
+    ],
+  },
   {
     versione: "0.4.0",
     note: [

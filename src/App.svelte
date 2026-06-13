@@ -16,6 +16,8 @@
   import VncView from "./components/VncView.svelte";
   import PaletteComandi from "./components/PaletteComandi.svelte";
   import CodaTrasferimenti from "./components/CodaTrasferimenti.svelte";
+  import GestioneChiavi from "./components/GestioneChiavi.svelte";
+  import ReplayView from "./components/ReplayView.svelte";
 
   let sessioni = $state([]); // rubrica salvata
   let tabs = $state([]); // sessioni aperte
@@ -28,7 +30,14 @@
   let mostraSnippet = $state(false);
   let mostraInfo = $state(false);
   let mostraPalette = $state(false);
+  let mostraChiavi = $state(false);
+  let mostraReplay = $state(false);
   let hostKey = $state(null); // { id, stato, impronta } per il prompt known_hosts
+
+  // Vault cifrato delle password.
+  let vault = $state({ esiste: false, sbloccato: false });
+  let mostraVault = $state(false);
+  let masterPw = $state("");
 
   // Scorciatoie globali da tastiera.
   function scorciatoie(e) {
@@ -54,7 +63,10 @@
     return [...m.entries()];
   });
 
-  onMount(caricaSessioni);
+  onMount(async () => {
+    await caricaSessioni();
+    await aggiornaVault();
+  });
 
   async function caricaSessioni() {
     try {
@@ -64,12 +76,47 @@
     }
   }
 
+  async function aggiornaVault() {
+    try {
+      vault = await api.vaultStato();
+    } catch {}
+  }
+
+  // Sblocca (o crea) il vault con la master password.
+  async function sbloccaVault() {
+    try {
+      await api.vaultSblocca(masterPw);
+      masterPw = "";
+      mostraVault = false;
+      await aggiornaVault();
+    } catch (e) {
+      alert(e);
+    }
+  }
+
+  async function bloccaVault() {
+    await api.vaultBlocca();
+    await aggiornaVault();
+  }
+
   function nuovaConnessione() {
     formIniziale = null;
     mostraForm = true;
   }
 
-  function apriSalvata(s) {
+  async function apriSalvata(s) {
+    // Se il vault è sbloccato, recupera la password salvata per questa sessione.
+    let password = "";
+    let inVault = false;
+    if (vault.sbloccato) {
+      try {
+        const p = await api.vaultLeggiPassword(s.id);
+        if (p) {
+          password = p;
+          inVault = true;
+        }
+      } catch {}
+    }
     formIniziale = {
       idSalvata: s.id,
       tipo: s.tipo || "ssh",
@@ -78,11 +125,14 @@
       porta: s.porta || 22,
       utente: s.utente || "",
       metodo: s.chiave ? "chiave" : "password",
+      password,
+      salvaVault: inVault,
       percorsoChiave: s.chiave || "",
       porta_seriale: s.porta_seriale || "",
       baud: s.baud || 115200,
       gruppo: s.gruppo || "",
       colore: s.colore || "#37b24d",
+      tags: (s.tags || []).join(", "),
       usaJump: !!s.jump_host,
       jump_host: s.jump_host || "",
       jump_porta: s.jump_porta || 22,
@@ -156,12 +206,17 @@
       baud: Number(form.baud),
       colore: form.colore,
       layout: "singolo", // singolo | h (affiancati) | v (impilati)
-      panes: [{ pid: tid, connesso: false }],
+      panes: [{ pid: tid, connesso: false, stato: "connessione" }],
     };
 
     if (form.salva) {
+      const idSessione = form.idSalvata || crypto.randomUUID();
+      const tags = (form.tags || "")
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
       await api.salvaSessione({
-        id: form.idSalvata || crypto.randomUUID(),
+        id: idSessione,
         nome,
         tipo: form.tipo,
         host: form.host,
@@ -172,12 +227,17 @@
         colore: form.colore || null,
         porta_seriale: form.porta_seriale || null,
         baud: form.tipo === "seriale" ? Number(form.baud) : null,
+        tags,
         jump_host: form.usaJump ? form.jump_host : null,
         jump_porta: form.usaJump ? Number(form.jump_porta) : null,
         jump_utente: form.usaJump ? form.jump_utente : null,
         jump_chiave:
           form.usaJump && form.jump_metodo === "chiave" ? form.jump_chiave : null,
       });
+      // Salva la password nel vault cifrato, se richiesto e sbloccato.
+      if (form.salvaVault && vault.sbloccato && form.password) {
+        await api.vaultSalvaPassword(idSessione, form.password).catch((e) => alert(e));
+      }
       caricaSessioni();
     }
 
@@ -203,7 +263,7 @@
   function split(direzione) {
     if (!tabAttivo || tabAttivo.panes.length >= 4) return;
     tabAttivo.layout = direzione;
-    tabAttivo.panes.push({ pid: crypto.randomUUID(), connesso: false });
+    tabAttivo.panes.push({ pid: crypto.randomUUID(), connesso: false, stato: "connessione" });
   }
 
   // Chiude un singolo pannello di una scheda.
@@ -245,7 +305,7 @@
       ...t,
       id: nid,
       layout: "singolo",
-      panes: [{ pid: nid, connesso: false }],
+      panes: [{ pid: nid, connesso: false, stato: "connessione" }],
     };
     tabs.push(copia);
     tabAttivoId = nid;
@@ -279,6 +339,25 @@
     }
   }
 
+  // Avvia/ferma la registrazione (asciicast) della scheda attiva.
+  async function toggleRec() {
+    if (!tabAttivo) return;
+    const pid = tabAttivo.panes[0].pid;
+    if (tabAttivo.regAttiva) {
+      await api.termRecFerma(pid).catch(() => {});
+      tabAttivo.regAttiva = false;
+    } else {
+      const dest = await salvaFile({ defaultPath: `${tabAttivo.nome}.cast` });
+      if (!dest) return;
+      try {
+        await api.termRecAvvia(pid, dest);
+        tabAttivo.regAttiva = true;
+      } catch (e) {
+        alert(e);
+      }
+    }
+  }
+
   // Conferma la chiave del server e ritenta la connessione.
   function accettaHostKey() {
     const modo = hostKey.stato === "cambiata" ? "sostituisci" : "accetta";
@@ -306,7 +385,15 @@
   }
 
   function icona(tipo) {
-    return { ssh: "🔐", locale: "💻", telnet: "🌐", seriale: "🔌" }[tipo] || "🖥";
+    return { ssh: "🔐", locale: "💻", telnet: "🌐", seriale: "🔌", vnc: "🖥" }[tipo] || "🖥";
+  }
+
+  // Colore del pallino di stato della scheda.
+  function statoColore(t) {
+    const s = t.panes.map((p) => p.stato);
+    if (s.every((x) => x === "connesso")) return "#2f9e44";
+    if (s.some((x) => x === "caduto")) return "#e03131";
+    return "#f59f00";
   }
 </script>
 
@@ -348,6 +435,17 @@
         <div class="vuoto">Nessuna sessione salvata.<br />Creane una con "+ Nuova sessione".</div>
       {/each}
     </div>
+    <div class="azioni" style="display:flex;gap:6px;padding-bottom:0">
+      <button style="flex:1" title="Chiavi SSH" onclick={() => (mostraChiavi = true)}>🔑 Chiavi</button>
+      <button
+        style="flex:1"
+        title={vault.sbloccato ? "Vault sbloccato (clic per bloccare)" : "Sblocca il vault"}
+        onclick={() => (vault.sbloccato ? bloccaVault() : (mostraVault = true))}
+      >
+        {vault.sbloccato ? "🔓 Vault" : "🔒 Vault"}
+      </button>
+      <button style="flex:1" title="Replay registrazioni" onclick={() => (mostraReplay = true)}>▶ Replay</button>
+    </div>
     <div class="azioni" style="display:flex;gap:6px">
       <button style="flex:1" onclick={() => (mostraSnippet = true)}>✂ Snippet</button>
       <button style="flex:1" onclick={() => (mostraImpostazioni = true)}>⚙ Opzioni</button>
@@ -364,6 +462,7 @@
           style={t.colore ? `border-top:2px solid ${t.colore}` : ""}
           onclick={() => (tabAttivoId = t.id)}
         >
+          <span class="dot" style="background:{statoColore(t)}"></span>
           <span>{icona(t.tipo)} {t.nome}</span>
           <button class="x" onclick={(e) => (e.stopPropagation(), chiudiTab(t.id))}>✕</button>
         </div>
@@ -382,8 +481,13 @@
           <button class="strumento" title="Ingrandisci testo" onclick={() => azione("zoom", 1)}>A+</button>
           <button
             class="strumento {tabAttivo.logAttivo ? 'attivo-log' : ''}"
-            title="Registra su file"
-            onclick={toggleLog}>{tabAttivo.logAttivo ? "⏺ Log ON" : "⏺ Log"}</button
+            title="Registra l'output su file di testo"
+            onclick={toggleLog}>{tabAttivo.logAttivo ? "Log ON" : "Log"}</button
+          >
+          <button
+            class="strumento {tabAttivo.regAttiva ? 'attivo-log' : ''}"
+            title="Registra la sessione (replay)"
+            onclick={toggleRec}>{tabAttivo.regAttiva ? "⏺ REC" : "⏺ Rec"}</button
           >
         {/if}
         <button class="strumento" title="Dividi affiancato" onclick={() => split("h")}>▦</button>
@@ -418,8 +522,8 @@
                 {#if t.tipo === "vnc"}
                   <VncView
                     tab={{ ...t, id: p.pid }}
-                    onConnesso={() => (p.connesso = true)}
-                    onChiuso={() => (p.connesso = false)}
+                    onConnesso={() => ((p.connesso = true), (p.stato = "connesso"))}
+                    onChiuso={() => ((p.connesso = false), (p.stato = "caduto"))}
                   />
                 {:else}
                   <Terminale
@@ -427,8 +531,8 @@
                     tab={{ ...t, id: p.pid }}
                     attivo={t.id === tabAttivoId}
                     {invia}
-                    onConnesso={() => (p.connesso = true)}
-                    onChiuso={() => (p.connesso = false)}
+                    onConnesso={() => ((p.connesso = true), (p.stato = "connesso"))}
+                    onChiuso={() => ((p.connesso = false), (p.stato = "caduto"))}
                     onHostKey={(info) => (hostKey = info)}
                   />
                 {/if}
@@ -483,6 +587,46 @@
     onNuova={() => ((mostraPalette = false), nuovaConnessione())}
     onChiudi={() => (mostraPalette = false)}
   />
+{/if}
+
+{#if mostraChiavi}
+  <GestioneChiavi
+    idSessione={tabAttivo?.tipo === "ssh" ? tabAttivo.panes[0].pid : null}
+    onChiudi={() => (mostraChiavi = false)}
+  />
+{/if}
+
+{#if mostraReplay}
+  <ReplayView onChiudi={() => (mostraReplay = false)} />
+{/if}
+
+{#if mostraVault}
+  <div class="overlay" onclick={() => (mostraVault = false)}>
+    <div class="modale" onclick={(e) => e.stopPropagation()} style="width:380px">
+      <h2>🔒 Vault password</h2>
+      <p style="color:var(--testo2);font-size:12px;margin-top:0">
+        {vault.esiste
+          ? "Inserisci la master password per sbloccare il vault."
+          : "Imposta una master password: cifrerà le password salvate."}
+      </p>
+      <div class="campo">
+        <label>Master password</label>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          type="password"
+          autofocus
+          bind:value={masterPw}
+          onkeydown={(e) => e.key === "Enter" && sbloccaVault()}
+        />
+      </div>
+      <div class="pulsanti">
+        <button onclick={() => (mostraVault = false)}>Annulla</button>
+        <button class="primario" onclick={sbloccaVault}>
+          {vault.esiste ? "Sblocca" : "Crea vault"}
+        </button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 <CodaTrasferimenti />

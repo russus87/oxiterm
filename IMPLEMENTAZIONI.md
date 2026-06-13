@@ -99,6 +99,21 @@ Legenda: ✅ fatto · 🚧 in corso · ⏳ pianificato · ❌ fuori scope
 8. ✅ **Sincronizzazione cloud (Git)**: `src-tauri/git_sync.rs` (push/pull con git2), UI in Impostazioni
 9. ✅ **Jump host / ProxyJump**: `connect_stream` attraverso un bastion (`core/ssh.rs`), campi nel form
 
+## Fase 10 — i 10 suggerimenti ✅ (v0.5.0)
+
+1. ✅ **Test automatici del core** (telnet IAC, vnc componente, storage round-trip): `cargo test -p oxiterm-core` 7 verdi
+2. ✅ **Stato connessione**: pallino verde/giallo/rosso per scheda (`statoColore`, campo `stato` per pannello)
+3. ✅ **Gestione chiavi SSH**: `core/chiavi.rs` (genera Ed25519, elenca ~/.ssh), `copia_chiave` (ssh-copy-id
+   via `Connessione::esegui`), UI `GestioneChiavi.svelte`
+4. ✅ **Editor remoto integrato**: `sftp_leggi/scrivi_testo`, `EditorRemoto.svelte` (oltre all'editor di sistema)
+5. ✅ **Segnalibri SFTP**: `lib/segnalibri.svelte.js` (localStorage), barra nel pannello SFTP
+6. ✅ **Trasferimento ricorsivo cartelle**: `sftp::carica/scarica_cartella` + pulsanti SFTP
+7. ✅ **Tag sessioni**: campo `tags`, input nel form, ricerca nella palette
+8. ⏳ **Client RDP**: rinviato (progetto a sé, vedi sotto)
+9. ✅ **Registrazione & replay**: asciicast (`term_rec_avvia/ferma`, `leggi_file`), `ReplayView.svelte`
+10. ✅ **Vault cifrato**: `src-tauri/vault.rs` (Argon2 + AES-256-GCM), sblocco con master password,
+    salvataggio/lettura password per sessione
+
 ## Non implementati — valutazione onesta
 
 - ❌ **Client RDP / VNC**: sono di fatto applicazioni a sé (rendering del desktop remoto frame per

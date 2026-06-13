@@ -6,9 +6,13 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import * as api from "../lib/api.js";
   import { aggiungi, completa } from "../lib/trasferimenti.svelte.js";
+  import { segnalibri, aggiungi as aggSegnalibro, rimuovi as rimSegnalibro } from "../lib/segnalibri.svelte.js";
+  import EditorRemoto from "./EditorRemoto.svelte";
 
   let { id, pronto, attivo } = $props();
   let scollega;
+  let editorPercorso = $state(null); // file aperto nell'editor integrato
+  let mostraSegnalibri = $state(false);
 
   let percorso = $state("");
   let modificaPercorso = $state(""); // valore della barra modificabile
@@ -142,6 +146,38 @@
     }
   }
 
+  // Carica un'intera cartella locale (ricorsiva).
+  async function caricaCartella() {
+    const dir = await apriFile({ directory: true });
+    if (!dir) return;
+    const nome = dir.split(/[\\/]/).pop();
+    const tid = crypto.randomUUID();
+    aggiungi(tid, nome + "/", "su");
+    try {
+      await api.sftpCaricaCartella(id, dir, unisci(percorso, nome));
+      completa(tid, true);
+      aggiorna();
+    } catch (e) {
+      completa(tid, false);
+      errore = String(e);
+    }
+  }
+
+  // Scarica un'intera cartella remota (ricorsiva).
+  async function scaricaCartella(v) {
+    const dir = await apriFile({ directory: true });
+    if (!dir) return;
+    const tid = crypto.randomUUID();
+    aggiungi(tid, v.nome + "/", "giu");
+    try {
+      await api.sftpScaricaCartella(id, unisci(percorso, v.nome), `${dir}/${v.nome}`);
+      completa(tid, true);
+    } catch (e) {
+      completa(tid, false);
+      errore = String(e);
+    }
+  }
+
   // Apre il file remoto nell'editor di sistema; le modifiche salvate vengono
   // ricaricate automaticamente sul server (gestito dal backend).
   async function modifica(v) {
@@ -173,8 +209,23 @@
     <button title="Su" onclick={() => vai(genitore(percorso))}>↑</button>
     <button title="Aggiorna" onclick={aggiorna}>⟳</button>
     <button title="Nuova cartella" onclick={nuovaCartella}>＋📁</button>
-    <button title="Carica file" onclick={carica}>⬆ Carica</button>
+    <button title="Carica file" onclick={carica}>⬆</button>
+    <button title="Carica cartella" onclick={caricaCartella}>⬆📁</button>
+    <button title="Aggiungi ai segnalibri" onclick={() => aggSegnalibro(percorso)}>★</button>
+    <button title="Segnalibri" onclick={() => (mostraSegnalibri = !mostraSegnalibri)}>▾</button>
   </div>
+  {#if mostraSegnalibri}
+    <div class="segnalibri">
+      {#each segnalibri as s (s)}
+        <div class="seg-riga">
+          <span class="seg-nome" onclick={() => ((mostraSegnalibri = false), vai(s))}>{s}</span>
+          <button class="pericolo" onclick={() => rimSegnalibro(s)}>✕</button>
+        </div>
+      {:else}
+        <div class="vuoto">Nessun segnalibro.</div>
+      {/each}
+    </div>
+  {/if}
 
   <!-- Breadcrumb cliccabile -->
   <div class="briciole">
@@ -201,8 +252,11 @@
         <span class="nome">{v.nome}</span>
         {#if !v.dir}<span class="dim">{formattaDim(v.dimensione)}</span>{/if}
         <span class="ops">
-          {#if !v.dir}
-            <button title="Apri in editor" onclick={(e) => (e.stopPropagation(), modifica(v))}>✏️</button>
+          {#if v.dir}
+            <button title="Scarica cartella" onclick={(e) => (e.stopPropagation(), scaricaCartella(v))}>⬇📁</button>
+          {:else}
+            <button title="Modifica (editor integrato)" onclick={(e) => (e.stopPropagation(), (editorPercorso = unisci(percorso, v.nome)))}>📝</button>
+            <button title="Apri in editor di sistema" onclick={(e) => (e.stopPropagation(), modifica(v))}>✏️</button>
             <button title="Scarica" onclick={(e) => (e.stopPropagation(), scarica(v))}>⬇</button>
           {/if}
           <button title="Rinomina" onclick={(e) => (e.stopPropagation(), rinomina(v))}>✎</button>
@@ -215,3 +269,7 @@
     {/if}
   </div>
 </div>
+
+{#if editorPercorso}
+  <EditorRemoto {id} percorso={editorPercorso} onChiudi={() => (editorPercorso = null)} />
+{/if}
