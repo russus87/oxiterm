@@ -84,6 +84,21 @@ Legenda: ✅ fatto · 🚧 in corso · ⏳ pianificato · ❌ fuori scope
 - ✅ **Split dei pannelli**: una scheda può contenere fino a 4 terminali affiancati (▦) o impilati (▤),
   ognuno con la propria connessione; chiusura del singolo pannello
 
+## Fase 9 — i 9 punti proposti ✅ (v0.4.0)
+
+1. ✅ **Riconnessione automatica**: backoff esponenziale 1→30s (`Terminale.svelte`), opzione in Impostazioni
+2. ✅ **Log di sessione su file**: `term_log_avvia/ferma`, l'output viene scritto dal task di inoltro;
+   pulsante "⏺ Log" nella tabbar
+3. ✅ **Colore per host**: campo `colore` applicato a scheda (bordo) e rubrica
+4. ✅ **Palette comandi (Ctrl+P)**: `PaletteComandi.svelte`, ricerca + frecce + Invio
+5. ✅ **Drag & drop SFTP**: `getCurrentWebview().onDragDropEvent` nel pannello attivo → upload
+6. ✅ **Coda trasferimenti con avanzamento**: `sftp::carica/scarica_progresso` + eventi `sftp-progresso`,
+   store `trasferimenti.svelte.js`, `CodaTrasferimenti.svelte` con barre
+7. ✅ **Client VNC (sperimentale)**: `core/vnc.rs` (crate `vnc`), `VncView.svelte` (canvas + mouse/tastiera),
+   tipo sessione "vnc". ⚠️ Non testato dal vivo: da verificare/rifinire.
+8. ✅ **Sincronizzazione cloud (Git)**: `src-tauri/git_sync.rs` (push/pull con git2), UI in Impostazioni
+9. ✅ **Jump host / ProxyJump**: `connect_stream` attraverso un bastion (`core/ssh.rs`), campi nel form
+
 ## Non implementati — valutazione onesta
 
 - ❌ **Client RDP / VNC**: sono di fatto applicazioni a sé (rendering del desktop remoto frame per

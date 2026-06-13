@@ -61,10 +61,15 @@ git push origin v0.1.0
 - [x] Forward remoto SSH (-R), known_hosts interattivo
 - [x] Apertura file remoti in editor con auto-salvataggio
 - [x] Split dei pannelli (fino a 4 terminali per scheda)
+- [x] Riconnessione automatica, log di sessione, colore per host
+- [x] Palette comandi (Ctrl+P), drag&drop + coda trasferimenti SFTP
+- [x] Jump host / ProxyJump, sincronizzazione cloud della rubrica (Git)
+- [x] Client VNC (sperimentale)
 
 ## Roadmap
 
-- [ ] Client RDP/VNC (progetto a sé)
+- [ ] Rifinitura/test del client VNC
+- [ ] Client RDP (progetto a sé)
 - [ ] Mosh
 
 Vedi `IMPLEMENTAZIONI.md` per il diario dettagliato di tutto ciò che è stato fatto.

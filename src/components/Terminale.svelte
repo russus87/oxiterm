@@ -22,6 +22,9 @@
   let off = [];
   let mostraCerca = $state(false);
   let testoCerca = $state("");
+  let distrutto = false;
+  let timerRiconn;
+  let tentativi = 0;
 
   onMount(async () => {
     term = new Terminal({
@@ -51,6 +54,10 @@
       await listen(`term-chiuso-${tab.id}`, () => {
         term.write("\r\n\x1b[31m[sessione chiusa]\x1b[0m\r\n");
         onChiuso?.();
+        // Auto-riconnessione (non per il terminale locale, dove chiudere è voluto).
+        if (impostazioni.autoReconnect && tab.tipo !== "locale" && !distrutto) {
+          programmaRiconnessione();
+        }
       }),
     );
 
@@ -84,8 +91,28 @@
     }
   }
 
+  // Riprova a connettersi con attesa crescente (1s, 2s, 4s… max 30s).
+  function programmaRiconnessione() {
+    if (distrutto) return;
+    tentativi++;
+    const attesa = Math.min(30000, 1000 * 2 ** (tentativi - 1));
+    term.write(`\x1b[33m[riconnessione tra ${attesa / 1000}s…]\x1b[0m\r\n`);
+    timerRiconn = setTimeout(async () => {
+      try {
+        await avvia();
+        onConnesso?.();
+        tentativi = 0;
+        term.write("\x1b[32m[riconnesso]\x1b[0m\r\n");
+        term.focus();
+      } catch {
+        programmaRiconnessione();
+      }
+    }, attesa);
+  }
+
   // Operazioni da fare una volta connessi (collega input, resize, scorciatoie).
   function dopoConnesso() {
+    tentativi = 0;
     onConnesso?.();
     term.onData((d) => invia(tab.id, d));
     term.onResize(({ cols, rows }) => api.termRidimensiona(tab.id, cols, rows));
@@ -116,6 +143,7 @@
         colonne: term.cols,
         righe: term.rows,
         modo,
+        jump: tab.jump,
       });
     } else if (tab.tipo === "locale") {
       await api.apriLocale(tab.id, tab.shell, term.cols, term.rows);
@@ -184,6 +212,8 @@
   });
 
   onDestroy(() => {
+    distrutto = true;
+    clearTimeout(timerRiconn);
     off.forEach((f) => f());
     term?.dispose();
   });

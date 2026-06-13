@@ -1,10 +1,14 @@
 <script>
   // Pannello SFTP affiancato al terminale: sfoglia, scarica e carica file remoti.
+  import { onMount, onDestroy } from "svelte";
   import { open as apriFile, save as salvaFile } from "@tauri-apps/plugin-dialog";
   import { openPath } from "@tauri-apps/plugin-opener";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
   import * as api from "../lib/api.js";
+  import { aggiungi, completa } from "../lib/trasferimenti.svelte.js";
 
-  let { id, pronto } = $props();
+  let { id, pronto, attivo } = $props();
+  let scollega;
 
   let percorso = $state("");
   let modificaPercorso = $state(""); // valore della barra modificabile
@@ -74,30 +78,48 @@
   async function scarica(v) {
     const dest = await salvaFile({ defaultPath: v.nome });
     if (!dest) return;
-    stato = `⬇ scarico ${v.nome}…`;
+    const tid = crypto.randomUUID();
+    aggiungi(tid, v.nome, "giu");
     try {
-      await api.sftpScarica(id, unisci(percorso, v.nome), dest);
-      stato = `✓ scaricato ${v.nome}`;
+      await api.sftpScaricaCoda(id, tid, unisci(percorso, v.nome), dest);
+      completa(tid, true);
     } catch (e) {
+      completa(tid, false);
       errore = String(e);
-      stato = "";
+    }
+  }
+
+  // Carica un singolo file locale nella cartella corrente, con coda+progresso.
+  async function caricaUno(sorgente) {
+    const nome = sorgente.split(/[\\/]/).pop();
+    const tid = crypto.randomUUID();
+    aggiungi(tid, nome, "su");
+    try {
+      await api.sftpCaricaCoda(id, tid, sorgente, unisci(percorso, nome));
+      completa(tid, true);
+    } catch (e) {
+      completa(tid, false);
+      errore = String(e);
     }
   }
 
   async function carica() {
-    const sorgente = await apriFile({ multiple: false });
-    if (!sorgente) return;
-    const nome = sorgente.split(/[\\/]/).pop();
-    stato = `⬆ carico ${nome}…`;
-    try {
-      await api.sftpCarica(id, sorgente, unisci(percorso, nome));
-      stato = `✓ caricato ${nome}`;
-      aggiorna();
-    } catch (e) {
-      errore = String(e);
-      stato = "";
-    }
+    const scelti = await apriFile({ multiple: true });
+    if (!scelti) return;
+    const lista = Array.isArray(scelti) ? scelti : [scelti];
+    for (const s of lista) await caricaUno(s);
+    aggiorna();
   }
+
+  // Drag & drop di file dal sistema: attivo solo sulla scheda corrente.
+  onMount(async () => {
+    scollega = await getCurrentWebview().onDragDropEvent(async (e) => {
+      if (e.payload.type !== "drop" || !attivo || !pronto) return;
+      for (const p of e.payload.paths) await caricaUno(p);
+      aggiorna();
+    });
+  });
+  onDestroy(() => scollega?.());
 
   async function nuovaCartella() {
     const nome = prompt("Nome della nuova cartella:");

@@ -1,7 +1,20 @@
 // Versione dell'app e changelog, mostrati nel pannello Info.
-export const VERSIONE = "0.3.0";
+export const VERSIONE = "0.4.0";
 
 export const changelog = [
+  {
+    versione: "0.4.0",
+    note: [
+      "Riconnessione automatica delle sessioni cadute (con attesa crescente)",
+      "Registrazione della sessione su file (log)",
+      "Colore per scheda (dalla rubrica) per riconoscere gli host a colpo d'occhio",
+      "Palette comandi (Ctrl+P) per aprire al volo le sessioni salvate",
+      "Drag & drop di file nel pannello SFTP + coda con barre di avanzamento",
+      "Jump host / ProxyJump: connessione attraverso un bastion",
+      "Sincronizzazione cloud della rubrica via Git (push/pull)",
+      "Client VNC sperimentale (canvas + mouse/tastiera)",
+    ],
+  },
   {
     versione: "0.3.0",
     note: [

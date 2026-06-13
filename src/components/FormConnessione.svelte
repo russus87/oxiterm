@@ -30,6 +30,17 @@
       gruppo: "",
       colore: "#37b24d",
       salva: true,
+      // VNC
+      vnc_password: "",
+      // Jump host (ProxyJump) — solo per SSH
+      usaJump: false,
+      jump_host: "",
+      jump_porta: 22,
+      jump_utente: "",
+      jump_metodo: "password",
+      jump_password: "",
+      jump_chiave: "",
+      jump_passphrase: "",
     };
   }
 
@@ -41,8 +52,9 @@
 
   // Aggiusta la porta di default quando cambia il tipo.
   function cambiaTipo() {
-    if (form.tipo === "ssh" && (!form.porta || form.porta === 23)) form.porta = 22;
-    if (form.tipo === "telnet" && (!form.porta || form.porta === 22)) form.porta = 23;
+    if (form.tipo === "ssh" && [23, 5900].includes(form.porta)) form.porta = 22;
+    if (form.tipo === "telnet" && [22, 5900].includes(form.porta)) form.porta = 23;
+    if (form.tipo === "vnc" && [22, 23].includes(form.porta)) form.porta = 5900;
   }
 
   async function scegliChiave() {
@@ -50,9 +62,15 @@
     if (f) form.percorsoChiave = f;
   }
 
+  async function scegliChiaveJump() {
+    const f = await apriFile({ multiple: false });
+    if (f) form.jump_chiave = f;
+  }
+
   const valido = $derived(
     (form.tipo === "ssh" && form.host && form.utente) ||
       (form.tipo === "telnet" && form.host) ||
+      (form.tipo === "vnc" && form.host) ||
       (form.tipo === "seriale" && form.porta_seriale) ||
       form.tipo === "locale",
   );
@@ -69,6 +87,7 @@
         <option value="locale">Terminale locale</option>
         <option value="telnet">Telnet</option>
         <option value="seriale">Seriale</option>
+        <option value="vnc">VNC (sperimentale)</option>
       </select>
     </div>
 
@@ -77,7 +96,7 @@
       <input bind:value={form.nome} placeholder="Server di produzione" />
     </div>
 
-    {#if form.tipo === "ssh" || form.tipo === "telnet"}
+    {#if form.tipo === "ssh" || form.tipo === "telnet" || form.tipo === "vnc"}
       <div class="riga">
         <div class="campo" style="flex:3">
           <label>Host</label>
@@ -87,6 +106,13 @@
           <label>Porta</label>
           <input type="number" bind:value={form.porta} />
         </div>
+      </div>
+    {/if}
+
+    {#if form.tipo === "vnc"}
+      <div class="campo">
+        <label>Password VNC (se richiesta)</label>
+        <input type="password" bind:value={form.vnc_password} />
       </div>
     {/if}
 
@@ -119,6 +145,53 @@
           <label>Passphrase (se presente)</label>
           <input type="password" bind:value={form.passphrase} />
         </div>
+      {/if}
+
+      <!-- Jump host / ProxyJump -->
+      <div class="campo" style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <input type="checkbox" bind:checked={form.usaJump} style="width:auto" id="usaJump" />
+        <label for="usaJump" style="margin:0">Passa per un host intermedio (jump host)</label>
+      </div>
+      {#if form.usaJump}
+        <div class="riga">
+          <div class="campo" style="flex:3">
+            <label>Jump host</label>
+            <input bind:value={form.jump_host} placeholder="bastion.esempio.com" />
+          </div>
+          <div class="campo" style="flex:1">
+            <label>Porta</label>
+            <input type="number" bind:value={form.jump_porta} />
+          </div>
+        </div>
+        <div class="campo">
+          <label>Utente jump</label>
+          <input bind:value={form.jump_utente} />
+        </div>
+        <div class="campo">
+          <label>Autenticazione jump</label>
+          <select bind:value={form.jump_metodo}>
+            <option value="password">Password</option>
+            <option value="chiave">Chiave privata</option>
+          </select>
+        </div>
+        {#if form.jump_metodo === "password"}
+          <div class="campo">
+            <label>Password jump</label>
+            <input type="password" bind:value={form.jump_password} />
+          </div>
+        {:else}
+          <div class="campo">
+            <label>Chiave privata jump</label>
+            <div class="riga">
+              <input bind:value={form.jump_chiave} placeholder="~/.ssh/id_ed25519" />
+              <button onclick={scegliChiaveJump}>Sfoglia</button>
+            </div>
+          </div>
+          <div class="campo">
+            <label>Passphrase jump</label>
+            <input type="password" bind:value={form.jump_passphrase} />
+          </div>
+        {/if}
       {/if}
     {/if}
 

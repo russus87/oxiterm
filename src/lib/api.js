@@ -13,6 +13,7 @@ export const sshConnetti = (p) =>
     colonne: p.colonne,
     righe: p.righe,
     modo: p.modo ?? null, // null=normale, "accetta", "sostituisci"
+    jump: p.jump ?? null, // { host, porta, utente, auth } oppure null
   });
 export const apriLocale = (id, shell, colonne, righe) =>
   invoke("apri_locale", { id, shell: shell || null, colonne, righe });
@@ -27,6 +28,16 @@ export const termScrivi = (id, dati) => invoke("term_scrivi", { id, dati });
 export const termRidimensiona = (id, colonne, righe) =>
   invoke("term_ridimensiona", { id, colonne, righe });
 export const termChiudi = (id) => invoke("term_chiudi", { id });
+export const termLogAvvia = (id, percorso) => invoke("term_log_avvia", { id, percorso });
+export const termLogFerma = (id) => invoke("term_log_ferma", { id });
+
+// ---- VNC (sperimentale) ----
+export const apriVnc = (id, host, porta, password) =>
+  invoke("apri_vnc", { id, host, porta, password: password || null });
+export const vncMouse = (id, x, y, bottoni) =>
+  invoke("vnc_mouse", { id, x, y, bottoni });
+export const vncTasto = (id, giu, key) => invoke("vnc_tasto", { id, giu, key });
+export const vncChiudi = (id) => invoke("vnc_chiudi", { id });
 
 // ---- Tunnel SSH ----
 export const tunnelLocale = (id, portaLocale, hostRemoto, portaRemota) =>
@@ -52,6 +63,10 @@ export const sftpElimina = (id, percorso, dir) =>
   invoke("sftp_elimina", { id, percorso, dir });
 export const sftpRinomina = (id, da, a) => invoke("sftp_rinomina", { id, da, a });
 export const sftpApriEditor = (id, remoto) => invoke("sftp_apri_editor", { id, remoto });
+export const sftpCaricaCoda = (id, trasferimento, locale, remoto) =>
+  invoke("sftp_carica_coda", { id, trasferimento, locale, remoto });
+export const sftpScaricaCoda = (id, trasferimento, remoto, locale) =>
+  invoke("sftp_scarica_coda", { id, trasferimento, remoto, locale });
 
 // ---- Session manager (rubrica salvata) ----
 export const listaSessioni = () => invoke("lista_sessioni");
@@ -59,6 +74,12 @@ export const salvaSessione = (sessione) => invoke("salva_sessione", { sessione }
 export const eliminaSessione = (id) => invoke("elimina_sessione", { id });
 export const esportaRubrica = (percorso) => invoke("esporta_rubrica", { percorso });
 export const importaRubrica = (percorso) => invoke("importa_rubrica", { percorso });
+
+// ---- Sincronizzazione cloud (Git) ----
+export const syncRemote = () => invoke("sync_remote");
+export const syncImpostaRemote = (url) => invoke("sync_imposta_remote", { url });
+export const syncPush = () => invoke("sync_push");
+export const syncPull = () => invoke("sync_pull");
 
 // ---- Snippet / macro ----
 export const listaSnippet = () => invoke("lista_snippet");

@@ -13,6 +13,9 @@
   import Tunnel from "./components/Tunnel.svelte";
   import Snippet from "./components/Snippet.svelte";
   import Info from "./components/Info.svelte";
+  import VncView from "./components/VncView.svelte";
+  import PaletteComandi from "./components/PaletteComandi.svelte";
+  import CodaTrasferimenti from "./components/CodaTrasferimenti.svelte";
 
   let sessioni = $state([]); // rubrica salvata
   let tabs = $state([]); // sessioni aperte
@@ -24,7 +27,16 @@
   let mostraTunnel = $state(false);
   let mostraSnippet = $state(false);
   let mostraInfo = $state(false);
+  let mostraPalette = $state(false);
   let hostKey = $state(null); // { id, stato, impronta } per il prompt known_hosts
+
+  // Scorciatoie globali da tastiera.
+  function scorciatoie(e) {
+    if (e.ctrlKey && (e.key === "p" || e.key === "P")) {
+      e.preventDefault();
+      mostraPalette = !mostraPalette;
+    }
+  }
 
   // Riferimenti ai componenti Terminale, per chiamarne le funzioni (pulisci, zoom…).
   let refsTerm = {};
@@ -71,6 +83,12 @@
       baud: s.baud || 115200,
       gruppo: s.gruppo || "",
       colore: s.colore || "#37b24d",
+      usaJump: !!s.jump_host,
+      jump_host: s.jump_host || "",
+      jump_porta: s.jump_porta || 22,
+      jump_utente: s.jump_utente || "",
+      jump_metodo: s.jump_chiave ? "chiave" : "password",
+      jump_chiave: s.jump_chiave || "",
       salva: false,
     };
     mostraForm = true;
@@ -93,15 +111,34 @@
             passphrase: form.passphrase || null,
           };
 
+    // Eventuale jump host (ProxyJump).
+    const jump = form.usaJump
+      ? {
+          host: form.jump_host,
+          porta: Number(form.jump_porta),
+          utente: form.jump_utente,
+          auth:
+            form.jump_metodo === "password"
+              ? { tipo: "password", password: form.jump_password }
+              : {
+                  tipo: "chiave",
+                  percorso: form.jump_chiave,
+                  passphrase: form.jump_passphrase || null,
+                },
+        }
+      : null;
+
     const nome =
       form.nome ||
       (form.tipo === "ssh"
         ? `${form.utente}@${form.host}`
         : form.tipo === "telnet"
           ? `telnet ${form.host}`
-          : form.tipo === "seriale"
-            ? form.porta_seriale
-            : "locale");
+          : form.tipo === "vnc"
+            ? `vnc ${form.host}`
+            : form.tipo === "seriale"
+              ? form.porta_seriale
+              : "locale");
 
     const tid = crypto.randomUUID();
     const tab = {
@@ -112,9 +149,12 @@
       porta: Number(form.porta),
       utente: form.utente,
       auth,
+      jump,
+      vnc_password: form.vnc_password,
       shell: form.shell,
       porta_seriale: form.porta_seriale,
       baud: Number(form.baud),
+      colore: form.colore,
       layout: "singolo", // singolo | h (affiancati) | v (impilati)
       panes: [{ pid: tid, connesso: false }],
     };
@@ -132,6 +172,11 @@
         colore: form.colore || null,
         porta_seriale: form.porta_seriale || null,
         baud: form.tipo === "seriale" ? Number(form.baud) : null,
+        jump_host: form.usaJump ? form.jump_host : null,
+        jump_porta: form.usaJump ? Number(form.jump_porta) : null,
+        jump_utente: form.usaJump ? form.jump_utente : null,
+        jump_chiave:
+          form.usaJump && form.jump_metodo === "chiave" ? form.jump_chiave : null,
       });
       caricaSessioni();
     }
@@ -215,6 +260,25 @@
     }
   };
 
+  // Attiva/disattiva la registrazione su file della scheda attiva.
+  async function toggleLog() {
+    if (!tabAttivo) return;
+    const pid = tabAttivo.panes[0].pid;
+    if (tabAttivo.logAttivo) {
+      await api.termLogFerma(pid).catch(() => {});
+      tabAttivo.logAttivo = false;
+    } else {
+      const dest = await salvaFile({ defaultPath: `${tabAttivo.nome}.log` });
+      if (!dest) return;
+      try {
+        await api.termLogAvvia(pid, dest);
+        tabAttivo.logAttivo = true;
+      } catch (e) {
+        alert(e);
+      }
+    }
+  }
+
   // Conferma la chiave del server e ritenta la connessione.
   function accettaHostKey() {
     const modo = hostKey.stato === "cambiata" ? "sostituisci" : "accetta";
@@ -245,6 +309,8 @@
     return { ssh: "🔐", locale: "💻", telnet: "🌐", seriale: "🔌" }[tipo] || "🖥";
   }
 </script>
+
+<svelte:window onkeydown={scorciatoie} />
 
 <div class="app">
   <!-- Sidebar: session manager a gruppi -->
@@ -295,6 +361,7 @@
       {#each tabs as t (t.id)}
         <div
           class="tab {t.id === tabAttivoId ? 'attivo' : ''}"
+          style={t.colore ? `border-top:2px solid ${t.colore}` : ""}
           onclick={() => (tabAttivoId = t.id)}
         >
           <span>{icona(t.tipo)} {t.nome}</span>
@@ -306,12 +373,19 @@
         <div class="tab" style="color:#ffd43b" title="Broadcast attivo">📢 broadcast</div>
       {/if}
       {#if tabAttivo}
-        {#if tabAttivo.panes.some((p) => !p.connesso)}
-          <button class="strumento" title="Riconnetti" onclick={() => azione("riconnetti")}>↻ Riconnetti</button>
+        {#if tabAttivo.tipo !== "vnc"}
+          {#if tabAttivo.panes.some((p) => !p.connesso)}
+            <button class="strumento" title="Riconnetti" onclick={() => azione("riconnetti")}>↻ Riconnetti</button>
+          {/if}
+          <button class="strumento" title="Pulisci schermo" onclick={() => azione("pulisci")}>🧹</button>
+          <button class="strumento" title="Riduci testo" onclick={() => azione("zoom", -1)}>A−</button>
+          <button class="strumento" title="Ingrandisci testo" onclick={() => azione("zoom", 1)}>A+</button>
+          <button
+            class="strumento {tabAttivo.logAttivo ? 'attivo-log' : ''}"
+            title="Registra su file"
+            onclick={toggleLog}>{tabAttivo.logAttivo ? "⏺ Log ON" : "⏺ Log"}</button
+          >
         {/if}
-        <button class="strumento" title="Pulisci schermo" onclick={() => azione("pulisci")}>🧹</button>
-        <button class="strumento" title="Riduci testo" onclick={() => azione("zoom", -1)}>A−</button>
-        <button class="strumento" title="Ingrandisci testo" onclick={() => azione("zoom", 1)}>A+</button>
         <button class="strumento" title="Dividi affiancato" onclick={() => split("h")}>▦</button>
         <button class="strumento" title="Dividi impilato" onclick={() => split("v")}>▤</button>
         <button class="strumento" title="Duplica scheda" onclick={() => duplica(tabAttivo)}>⧉</button>
@@ -341,20 +415,32 @@
                 {#if t.panes.length > 1}
                   <button class="chiudi-pane" title="Chiudi pannello" onclick={() => chiudiPane(t, p.pid)}>✕</button>
                 {/if}
-                <Terminale
-                  bind:this={refsTerm[p.pid]}
-                  tab={{ ...t, id: p.pid }}
-                  attivo={t.id === tabAttivoId}
-                  {invia}
-                  onConnesso={() => (p.connesso = true)}
-                  onChiuso={() => (p.connesso = false)}
-                  onHostKey={(info) => (hostKey = info)}
-                />
+                {#if t.tipo === "vnc"}
+                  <VncView
+                    tab={{ ...t, id: p.pid }}
+                    onConnesso={() => (p.connesso = true)}
+                    onChiuso={() => (p.connesso = false)}
+                  />
+                {:else}
+                  <Terminale
+                    bind:this={refsTerm[p.pid]}
+                    tab={{ ...t, id: p.pid }}
+                    attivo={t.id === tabAttivoId}
+                    {invia}
+                    onConnesso={() => (p.connesso = true)}
+                    onChiuso={() => (p.connesso = false)}
+                    onHostKey={(info) => (hostKey = info)}
+                  />
+                {/if}
               </div>
             {/each}
           </div>
           {#if t.tipo === "ssh"}
-            <Sftp id={t.panes[0].pid} pronto={t.panes[0].connesso} />
+            <Sftp
+              id={t.panes[0].pid}
+              pronto={t.panes[0].connesso}
+              attivo={t.id === tabAttivoId}
+            />
           {/if}
         </div>
       {/each}
@@ -389,6 +475,17 @@
 {#if mostraInfo}
   <Info onChiudi={() => (mostraInfo = false)} />
 {/if}
+
+{#if mostraPalette}
+  <PaletteComandi
+    {sessioni}
+    onApri={(s) => ((mostraPalette = false), apriSalvata(s))}
+    onNuova={() => ((mostraPalette = false), nuovaConnessione())}
+    onChiudi={() => (mostraPalette = false)}
+  />
+{/if}
+
+<CodaTrasferimenti />
 
 {#if hostKey}
   <div class="overlay" onclick={() => (hostKey = null)}>

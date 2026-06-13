@@ -11,6 +11,7 @@ const DEFAULT = {
   cursorBlink: true,
   scrollback: 5000,
   broadcast: false, // invia l'input a tutte le schede contemporaneamente
+  autoReconnect: true, // riconnetti automaticamente le sessioni cadute
 };
 
 function carica() {
