@@ -64,5 +64,39 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Oxiterm ${{ github.ref_name }}"
           releaseDraft: true
-          releaseBody: "Pacchetti generati automaticamente."
+          releaseBody: "Pacchetti generati automaticamente. .pkg.tar.zst per Arch Linux."
           args: ${{ matrix.args }}
+
+  # --- Arch Linux: pacchetto nativo .pkg.tar.zst via makepkg ---
+  arch:
+    runs-on: ubuntu-latest
+    needs: build              # la release (draft) esiste già, creata dal job build
+    permissions:
+      contents: write
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Strumenti base nel container
+        run: pacman -Syu --noconfirm git nodejs npm rust base-devel cmake webkit2gtk-4.1 gtk3 librsvg sudo
+
+      - uses: actions/checkout@v4
+
+      - name: Inietta la versione dal tag nel PKGBUILD
+        run: |
+          VER="${GITHUB_REF_NAME#v}"        # v0.5.0 -> 0.5.0
+          sed -i "s/^pkgver=.*/pkgver=${VER}/" packaging/PKGBUILD
+          echo "Versione pacchetto: ${VER}"
+
+      - name: Build del pacchetto (makepkg non gira da root)
+        run: |
+          useradd -m builder
+          chown -R builder:builder .
+          sudo -u builder bash -c 'cd packaging && makepkg -f --noconfirm --nodeps'
+
+      - name: Carica il .pkg.tar.zst nella release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: packaging/*.pkg.tar.zst
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

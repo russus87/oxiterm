@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Oxiterm
+Comment=Terminale SSH/SFTP a schede
+Exec=oxiterm
+Icon=oxiterm
+Terminal=false
+Categories=Network;System;Utility;TerminalEmulator;
+Keywords=ssh;sftp;telnet;serial;vnc;terminal;

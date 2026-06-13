@@ -1,0 +1,38 @@
+# PKGBUILD per Oxiterm — genera un pacchetto Arch .pkg.tar.zst.
+# Pensato per la CI: la versione viene iniettata da release.yml (sed su pkgver).
+# Compila dal sorgente già presente nel repo e impacchetta il binario.
+pkgname=oxiterm
+pkgver=0.5.0
+pkgrel=1
+pkgdesc="Terminale SSH/SFTP a schede stile MobaXterm (Rust + Tauri + Svelte)"
+arch=('x86_64')
+url="https://github.com/russus87/oxiterm"
+license=('MIT')
+# Dipendenze a runtime: webkit per la finestra Tauri, gtk3 per la UI nativa.
+depends=('webkit2gtk-4.1' 'gtk3')
+# cmake serve a compilare aws-lc (russh) e libgit2 (sync); base-devel per il C (miniz del VNC).
+makedepends=('rust' 'cargo' 'nodejs' 'npm' 'base-devel' 'cmake')
+options=('!strip' '!lto')
+
+# Il PKGBUILD sta in packaging/, quindi la root del repo è la cartella superiore.
+_repo() { echo "$startdir/.."; }
+
+build() {
+    cd "$(_repo)"
+    npm install
+    # Genera il frontend (dist/), che Tauri incorpora nel binario.
+    npm run build
+    cargo build --release -p oxiterm
+}
+
+package() {
+    cd "$(_repo)"
+    # In un workspace Cargo il binario finisce in target/ alla root del repo.
+    install -Dm755 "target/release/oxiterm" "$pkgdir/usr/bin/oxiterm"
+    install -Dm644 "packaging/oxiterm.desktop" \
+        "$pkgdir/usr/share/applications/oxiterm.desktop"
+    install -Dm644 "src-tauri/icons/128x128.png" \
+        "$pkgdir/usr/share/icons/hicolor/128x128/apps/oxiterm.png"
+    install -Dm644 "src-tauri/icons/icon.png" \
+        "$pkgdir/usr/share/icons/hicolor/512x512/apps/oxiterm.png"
+}
