@@ -15,7 +15,7 @@
 
   // Proprietà: dati del tab + callback verso App.
   // `invia` decide se mandare l'input solo a questa scheda o a tutte (broadcast).
-  let { tab, attivo, invia, onConnesso, onErrore, onChiuso } = $props();
+  let { tab, attivo, invia, onConnesso, onErrore, onChiuso, onHostKey } = $props();
 
   let elemento;
   let term, fit, search;
@@ -54,23 +54,7 @@
       }),
     );
 
-    try {
-      await avvia();
-      onConnesso?.();
-      term.onData((d) => invia(tab.id, d));
-      term.onResize(({ cols, rows }) => api.termRidimensiona(tab.id, cols, rows));
-      term.attachCustomKeyEventHandler((ev) => {
-        if (ev.ctrlKey && ev.shiftKey && ev.key === "F" && ev.type === "keydown") {
-          mostraCerca = !mostraCerca;
-          return false;
-        }
-        return true;
-      });
-      term.focus();
-    } catch (e) {
-      term.write(`\r\n\x1b[31mErrore: ${e}\x1b[0m\r\n`);
-      onErrore?.(String(e));
-    }
+    await connetti();
 
     const ro = new ResizeObserver(() => {
       try {
@@ -81,8 +65,47 @@
     off.push(() => ro.disconnect());
   });
 
+  // Primo tentativo di connessione, con gestione della chiave del server.
+  async function connetti(modo) {
+    try {
+      await avvia(modo);
+      dopoConnesso();
+    } catch (e) {
+      const msg = String(e);
+      // Errore speciale "HOSTKEY:<stato>:<impronta>": chiediamo all'utente.
+      if (msg.includes("HOSTKEY:") && onHostKey) {
+        const dopo = msg.slice(msg.indexOf("HOSTKEY:") + 8);
+        const [stato, ...resto] = dopo.split(":");
+        onHostKey({ id: tab.id, stato, impronta: resto.join(":") });
+        return;
+      }
+      term.write(`\r\n\x1b[31mErrore: ${msg}\x1b[0m\r\n`);
+      onErrore?.(String(e));
+    }
+  }
+
+  // Operazioni da fare una volta connessi (collega input, resize, scorciatoie).
+  function dopoConnesso() {
+    onConnesso?.();
+    term.onData((d) => invia(tab.id, d));
+    term.onResize(({ cols, rows }) => api.termRidimensiona(tab.id, cols, rows));
+    term.attachCustomKeyEventHandler((ev) => {
+      if (ev.ctrlKey && ev.shiftKey && ev.key === "F" && ev.type === "keydown") {
+        mostraCerca = !mostraCerca;
+        return false;
+      }
+      return true;
+    });
+    term.focus();
+  }
+
+  // Ritenta la connessione fidandosi della chiave (chiamata da App dopo conferma).
+  export async function riprovaConFiducia(modo) {
+    await connetti(modo);
+  }
+
   // Avvia la connessione adatta al tipo di sessione.
-  async function avvia() {
+  async function avvia(modo) {
     if (tab.tipo === "ssh") {
       await api.sshConnetti({
         id: tab.id,
@@ -92,6 +115,7 @@
         auth: tab.auth,
         colonne: term.cols,
         righe: term.rows,
+        modo,
       });
     } else if (tab.tipo === "locale") {
       await api.apriLocale(tab.id, tab.shell, term.cols, term.rows);

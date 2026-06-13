@@ -8,10 +8,11 @@
 
   let tunnel = $state([]);
   let errore = $state("");
-  let tipo = $state("locale"); // locale | socks
+  let tipo = $state("locale"); // locale | socks | remoto
   let portaLocale = $state(8080);
   let hostRemoto = $state("");
   let portaRemota = $state(80);
+  let hostLocale = $state("localhost");
 
   onMount(aggiorna);
 
@@ -28,6 +29,8 @@
     try {
       if (tipo === "locale") {
         await api.tunnelLocale(id, Number(portaLocale), hostRemoto, Number(portaRemota));
+      } else if (tipo === "remoto") {
+        await api.tunnelRemoto(id, Number(portaRemota), hostLocale, Number(portaLocale));
       } else {
         await api.tunnelSocks(id, Number(portaLocale));
       }
@@ -51,6 +54,7 @@
       <label>Tipo</label>
       <select bind:value={tipo}>
         <option value="locale">Forward locale (-L)</option>
+        <option value="remoto">Forward remoto (-R)</option>
         <option value="socks">Proxy dinamico SOCKS5 (-D)</option>
       </select>
     </div>
@@ -72,6 +76,24 @@
       </div>
       <p style="color:var(--testo2);font-size:11px;margin:0 0 10px">
         La porta locale verrà inoltrata, via SSH, a host:porta remoti.
+      </p>
+    {:else if tipo === "remoto"}
+      <div class="riga">
+        <div class="campo" style="flex:1">
+          <label>Porta remota</label>
+          <input type="number" bind:value={portaRemota} />
+        </div>
+        <div class="campo" style="flex:2">
+          <label>Host locale</label>
+          <input bind:value={hostLocale} placeholder="localhost o IP raggiungibile da te" />
+        </div>
+        <div class="campo" style="flex:1">
+          <label>Porta locale</label>
+          <input type="number" bind:value={portaLocale} />
+        </div>
+      </div>
+      <p style="color:var(--testo2);font-size:11px;margin:0 0 10px">
+        Il server ascolterà sulla porta remota e inoltrerà a host:porta dal tuo lato.
       </p>
     {:else}
       <div class="campo">

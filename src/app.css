@@ -205,10 +205,30 @@ select {
 .pannello-tab.nascosto {
   display: none;
 }
+.area-terminali {
+  display: grid;
+  gap: 2px;
+  overflow: hidden;
+  background: var(--bordo);
+}
 .term-wrap {
   background: #1e1e1e;
   overflow: hidden;
   padding: 4px;
+  position: relative;
+}
+.chiudi-pane {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 6;
+  padding: 0 6px;
+  font-size: 11px;
+  opacity: 0.4;
+}
+.chiudi-pane:hover {
+  opacity: 1;
+  color: var(--pericolo);
 }
 .term-area {
   position: relative;

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use oxiterm_core::model::{Auth, Sessione, Snippet, VoceFile};
-use oxiterm_core::ssh::{Connessione, SftpSession, StopTunnel};
+use oxiterm_core::ssh::{Connessione, ModoFiducia, SftpSession, StopTunnel};
 use oxiterm_core::term::{Canale, ComandoTerm};
 use oxiterm_core::{locale, seriale, sftp, telnet, storage};
 use serde::Serialize;
@@ -110,9 +110,15 @@ async fn ssh_connetti(
     auth: Auth,
     colonne: u32,
     righe: u32,
+    modo: Option<String>,
 ) -> Result<(), String> {
     let known = file_known_hosts(&app)?;
-    let conn = Connessione::connetti(&host, porta, &utente, auth, known).await?;
+    let modo = match modo.as_deref() {
+        Some("accetta") => ModoFiducia::AccettaNuova,
+        Some("sostituisci") => ModoFiducia::Sostituisci,
+        _ => ModoFiducia::Normale,
+    };
+    let conn = Connessione::connetti(&host, porta, &utente, auth, known, modo).await?;
     let canale = conn.apri_shell(colonne, righe).await?;
     registra(&app, &stato, id, canale, Some(conn)).await;
     Ok(())
@@ -253,6 +259,29 @@ async fn tunnel_socks(
 }
 
 #[tauri::command]
+async fn tunnel_remoto(
+    stato: State<'_, Sessioni>,
+    id: String,
+    porta_remota: u16,
+    host_locale: String,
+    porta_locale: u16,
+) -> Result<String, String> {
+    let mut mappa = stato.0.lock().await;
+    let s = mappa.get_mut(&id).ok_or("sessione inesistente")?;
+    let conn = s.ssh.as_ref().ok_or("i tunnel sono disponibili solo via SSH")?;
+    let stop = conn
+        .tunnel_remoto(porta_remota, host_locale.clone(), porta_locale)
+        .await?;
+    let tid = format!("R{porta_remota}");
+    s.tunnel.push(TunnelAttivo {
+        id: tid.clone(),
+        descrizione: format!("remoto :{porta_remota} → {host_locale}:{porta_locale}"),
+        stop,
+    });
+    Ok(tid)
+}
+
+#[tauri::command]
 async fn lista_tunnel(stato: State<'_, Sessioni>, id: String) -> Result<Vec<TunnelView>, String> {
     let mappa = stato.0.lock().await;
     let s = mappa.get(&id).ok_or("sessione inesistente")?;
@@ -285,7 +314,7 @@ async fn ferma_tunnel(
 // ---------------------------------------------------------------------------
 
 /// Assicura che la sessione abbia un canale SFTP aperto, poi esegue `f`.
-async fn con_sftp<T, F, Fut>(stato: &State<'_, Sessioni>, id: &str, f: F) -> Result<T, String>
+async fn con_sftp<T, F, Fut>(stato: &Sessioni, id: &str, f: F) -> Result<T, String>
 where
     F: FnOnce(SftpSession) -> Fut,
     Fut: std::future::Future<Output = (SftpSession, Result<T, String>)>,
@@ -397,6 +426,72 @@ async fn sftp_rinomina(
     .await
 }
 
+/// Scarica un file remoto in una cartella temporanea, restituisce il percorso
+/// locale (che il frontend aprirà con l'editor di sistema) e avvia un piccolo
+/// task che lo ricarica sul server ogni volta che il file locale cambia.
+#[tauri::command]
+async fn sftp_apri_editor(
+    app: tauri::AppHandle,
+    stato: State<'_, Sessioni>,
+    id: String,
+    remoto: String,
+) -> Result<String, String> {
+    let nome = remoto
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("file")
+        .to_string();
+    let dir = std::env::temp_dir().join("oxiterm");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let locale = dir.join(&nome).to_string_lossy().to_string();
+
+    // Scarica subito.
+    {
+        let rem = remoto.clone();
+        let loc = locale.clone();
+        con_sftp(&stato, &id, move |c| async move {
+            let r = sftp::scarica(&c, &rem, &loc).await;
+            (c, r)
+        })
+        .await?;
+    }
+
+    // Auto-salvataggio: ogni secondo controlla la data di modifica e, se cambia,
+    // ricarica il file sul server. Si ferma se il file sparisce o la sessione chiude.
+    let app2 = app.clone();
+    let id2 = id.clone();
+    let rem2 = remoto.clone();
+    let loc2 = locale.clone();
+    tauri::async_runtime::spawn(async move {
+        let mtime = |p: &str| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+        let mut ultimo = mtime(&loc2);
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            let ora = mtime(&loc2);
+            if ora.is_none() {
+                break;
+            }
+            if ora != ultimo {
+                ultimo = ora;
+                let stato = app2.state::<Sessioni>();
+                let rem = rem2.clone();
+                let loc = loc2.clone();
+                let esito = con_sftp(&stato, &id2, move |c| async move {
+                    let r = sftp::carica(&c, &loc, &rem).await;
+                    (c, r)
+                })
+                .await;
+                if esito.is_err() {
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(locale)
+}
+
 // ---------------------------------------------------------------------------
 // Session manager: rubrica delle sessioni salvate
 // ---------------------------------------------------------------------------
@@ -500,6 +595,7 @@ pub fn run() {
             term_chiudi,
             tunnel_locale,
             tunnel_socks,
+            tunnel_remoto,
             lista_tunnel,
             ferma_tunnel,
             sftp_home,
@@ -509,6 +605,7 @@ pub fn run() {
             sftp_crea_cartella,
             sftp_elimina,
             sftp_rinomina,
+            sftp_apri_editor,
             lista_sessioni,
             salva_sessione,
             elimina_sessione,

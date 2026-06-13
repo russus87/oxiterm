@@ -58,12 +58,14 @@ git push origin v0.1.0
 - [x] SFTP con breadcrumb, percorso modificabile, stato trasferimenti
 - [x] Azioni scheda: riconnetti, duplica, pulisci, zoom
 
+- [x] Forward remoto SSH (-R), known_hosts interattivo
+- [x] Apertura file remoti in editor con auto-salvataggio
+- [x] Split dei pannelli (fino a 4 terminali per scheda)
+
 ## Roadmap
 
-- [ ] Forward remoto SSH (-R)
-- [ ] Apertura file remoti in editor (download temporaneo + ricarica)
-- [ ] Split dei pannelli
-- [ ] Client RDP/VNC
+- [ ] Client RDP/VNC (progetto a sé)
+- [ ] Mosh
 
 Vedi `IMPLEMENTAZIONI.md` per il diario dettagliato di tutto ciò che è stato fatto.
 

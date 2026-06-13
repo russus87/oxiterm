@@ -12,6 +12,7 @@ export const sshConnetti = (p) =>
     auth: p.auth,
     colonne: p.colonne,
     righe: p.righe,
+    modo: p.modo ?? null, // null=normale, "accetta", "sostituisci"
   });
 export const apriLocale = (id, shell, colonne, righe) =>
   invoke("apri_locale", { id, shell: shell || null, colonne, righe });
@@ -32,6 +33,8 @@ export const tunnelLocale = (id, portaLocale, hostRemoto, portaRemota) =>
   invoke("tunnel_locale", { id, portaLocale, hostRemoto, portaRemota });
 export const tunnelSocks = (id, portaLocale) =>
   invoke("tunnel_socks", { id, portaLocale });
+export const tunnelRemoto = (id, portaRemota, hostLocale, portaLocale) =>
+  invoke("tunnel_remoto", { id, portaRemota, hostLocale, portaLocale });
 export const listaTunnel = (id) => invoke("lista_tunnel", { id });
 export const fermaTunnel = (id, tunnelId) =>
   invoke("ferma_tunnel", { id, tunnelId });
@@ -48,6 +51,7 @@ export const sftpCreaCartella = (id, percorso) =>
 export const sftpElimina = (id, percorso, dir) =>
   invoke("sftp_elimina", { id, percorso, dir });
 export const sftpRinomina = (id, da, a) => invoke("sftp_rinomina", { id, da, a });
+export const sftpApriEditor = (id, remoto) => invoke("sftp_apri_editor", { id, remoto });
 
 // ---- Session manager (rubrica salvata) ----
 export const listaSessioni = () => invoke("lista_sessioni");

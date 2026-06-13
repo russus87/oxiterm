@@ -73,13 +73,25 @@ Legenda: ✅ fatto · 🚧 in corso · ⏳ pianificato · ❌ fuori scope
 - `npm run build` ✅
 - GUI non avviata in automatico (richiede display): da provare con `cargo tauri dev`
 
-## Da fare / idee future
+## Fase 8 — completamento roadmap ✅ (v0.3.0)
 
-- Forward remoto SSH (-R)
-- Apertura file remoti in un editor (download temporaneo + ricarica)
-- Verifica known_hosts interattiva (oggi: rifiuto automatico se la chiave cambia)
-- Split dei pannelli (più terminali nella stessa scheda)
-- Client RDP/VNC
+- ✅ **Forward remoto SSH (-R)**: il server ascolta e inoltra verso un bersaglio locale
+  (`core/ssh.rs`: `tunnel_remoto` + handler `server_channel_open_forwarded_tcpip`)
+- ✅ **known_hosts interattivo**: alla prima connessione o se la chiave cambia, la UI mostra
+  l'impronta SHA256 e chiede conferma; ritenta con "modo di fiducia" (errore `HOSTKEY:` dal core)
+- ✅ **Apertura file remoti in editor**: `sftp_apri_editor` scarica in temp, apre con l'app di
+  sistema (plugin opener) e **ricarica automaticamente** sul server a ogni salvataggio (polling mtime)
+- ✅ **Split dei pannelli**: una scheda può contenere fino a 4 terminali affiancati (▦) o impilati (▤),
+  ognuno con la propria connessione; chiusura del singolo pannello
+
+## Non implementati — valutazione onesta
+
+- ❌ **Client RDP / VNC**: sono di fatto applicazioni a sé (rendering del desktop remoto frame per
+  frame su canvas + inoltro input). Fattibili in Rust (IronRDP, vnc-rs) ma è una fase grossa e
+  rischiosa da consegnare non testata. Proposti come progetto dedicato a parte.
+- ❌ **Mosh**: protocollo UDP (SSP) che richiede `mosh-server` sul remoto e una macchina a stati
+  complessa; sproporzionato rispetto al valore qui.
+- ❌ **Server X11**: escluso su tua indicazione.
 
 ## Fuori scope (non clonabili realisticamente)
 

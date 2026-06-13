@@ -1,7 +1,16 @@
 // Versione dell'app e changelog, mostrati nel pannello Info.
-export const VERSIONE = "0.2.0";
+export const VERSIONE = "0.3.0";
 
 export const changelog = [
+  {
+    versione: "0.3.0",
+    note: [
+      "Forward remoto SSH (-R) oltre a locale (-L) e SOCKS5 (-D)",
+      "known_hosts interattivo: conferma chiave nuova o cambiata",
+      "Apertura file remoti nell'editor di sistema con auto-salvataggio",
+      "Split dei pannelli: più terminali affiancati o impilati nella stessa scheda",
+    ],
+  },
   {
     versione: "0.2.0",
     note: [

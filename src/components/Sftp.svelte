@@ -1,6 +1,7 @@
 <script>
   // Pannello SFTP affiancato al terminale: sfoglia, scarica e carica file remoti.
   import { open as apriFile, save as salvaFile } from "@tauri-apps/plugin-dialog";
+  import { openPath } from "@tauri-apps/plugin-opener";
   import * as api from "../lib/api.js";
 
   let { id, pronto } = $props();
@@ -119,6 +120,20 @@
     }
   }
 
+  // Apre il file remoto nell'editor di sistema; le modifiche salvate vengono
+  // ricaricate automaticamente sul server (gestito dal backend).
+  async function modifica(v) {
+    stato = `✎ apro ${v.nome}…`;
+    try {
+      const locale = await api.sftpApriEditor(id, unisci(percorso, v.nome));
+      await openPath(locale);
+      stato = `✎ ${v.nome} aperto (auto-salvataggio attivo)`;
+    } catch (e) {
+      errore = String(e);
+      stato = "";
+    }
+  }
+
   async function rinomina(v) {
     const nuovo = prompt("Nuovo nome:", v.nome);
     if (!nuovo || nuovo === v.nome) return;
@@ -165,6 +180,7 @@
         {#if !v.dir}<span class="dim">{formattaDim(v.dimensione)}</span>{/if}
         <span class="ops">
           {#if !v.dir}
+            <button title="Apri in editor" onclick={(e) => (e.stopPropagation(), modifica(v))}>✏️</button>
             <button title="Scarica" onclick={(e) => (e.stopPropagation(), scarica(v))}>⬇</button>
           {/if}
           <button title="Rinomina" onclick={(e) => (e.stopPropagation(), rinomina(v))}>✎</button>

@@ -24,6 +24,7 @@
   let mostraTunnel = $state(false);
   let mostraSnippet = $state(false);
   let mostraInfo = $state(false);
+  let hostKey = $state(null); // { id, stato, impronta } per il prompt known_hosts
 
   // Riferimenti ai componenti Terminale, per chiamarne le funzioni (pulisci, zoom…).
   let refsTerm = {};
@@ -102,8 +103,9 @@
             ? form.porta_seriale
             : "locale");
 
+    const tid = crypto.randomUUID();
     const tab = {
-      id: crypto.randomUUID(),
+      id: tid,
       tipo: form.tipo,
       nome,
       host: form.host,
@@ -113,7 +115,8 @@
       shell: form.shell,
       porta_seriale: form.porta_seriale,
       baud: Number(form.baud),
-      connesso: false,
+      layout: "singolo", // singolo | h (affiancati) | v (impilati)
+      panes: [{ pid: tid, connesso: false }],
     };
 
     if (form.salva) {
@@ -139,21 +142,49 @@
   }
 
   async function chiudiTab(id) {
-    await api.termChiudi(id).catch(() => {});
-    delete refsTerm[id];
-    const i = tabs.findIndex((t) => t.id === id);
-    tabs = tabs.filter((t) => t.id !== id);
+    const t = tabs.find((x) => x.id === id);
+    for (const p of t?.panes ?? []) {
+      await api.termChiudi(p.pid).catch(() => {});
+      delete refsTerm[p.pid];
+    }
+    const i = tabs.findIndex((x) => x.id === id);
+    tabs = tabs.filter((x) => x.id !== id);
     if (tabAttivoId === id) {
       tabAttivoId = tabs[Math.max(0, i - 1)]?.id ?? null;
     }
   }
 
-  // Inoltra l'input: a una sola scheda o a tutte (broadcast).
-  function invia(id, dati) {
+  // Divide la scheda attiva aggiungendo un pannello (stessa connessione).
+  function split(direzione) {
+    if (!tabAttivo || tabAttivo.panes.length >= 4) return;
+    tabAttivo.layout = direzione;
+    tabAttivo.panes.push({ pid: crypto.randomUUID(), connesso: false });
+  }
+
+  // Chiude un singolo pannello di una scheda.
+  async function chiudiPane(tab, pid) {
+    await api.termChiudi(pid).catch(() => {});
+    delete refsTerm[pid];
+    tab.panes = tab.panes.filter((p) => p.pid !== pid);
+    if (tab.panes.length === 0) chiudiTab(tab.id);
+    else if (tab.panes.length === 1) tab.layout = "singolo";
+  }
+
+  // Stile CSS della griglia dei pannelli in base a layout e numero.
+  function grigliaPannelli(tab) {
+    const n = tab.panes.length;
+    if (n <= 1) return "";
+    if (tab.layout === "v") return `grid-template-rows: repeat(${n}, 1fr)`;
+    return `grid-template-columns: repeat(${n}, 1fr)`;
+  }
+
+  // Inoltra l'input: a un solo pannello o a tutti (broadcast).
+  function invia(pid, dati) {
     if (impostazioni.broadcast) {
-      for (const t of tabs) if (t.connesso) api.termScrivi(t.id, dati);
+      for (const t of tabs)
+        for (const p of t.panes) if (p.connesso) api.termScrivi(p.pid, dati);
     } else {
-      api.termScrivi(id, dati);
+      api.termScrivi(pid, dati);
     }
   }
 
@@ -164,16 +195,32 @@
 
   // Apre una nuova scheda con gli stessi parametri di una esistente.
   function duplica(t) {
-    const copia = { ...t, id: crypto.randomUUID(), connesso: false };
+    const nid = crypto.randomUUID();
+    const copia = {
+      ...t,
+      id: nid,
+      layout: "singolo",
+      panes: [{ pid: nid, connesso: false }],
+    };
     tabs.push(copia);
-    tabAttivoId = copia.id;
+    tabAttivoId = nid;
   }
 
-  // Azioni sul terminale attivo (delegano al componente via ref).
+  // Azioni sui pannelli della scheda attiva (delegano ai componenti via ref).
   const azione = (fn, ...args) => {
-    const r = refsTerm[tabAttivoId];
-    if (r && r[fn]) r[fn](...args);
+    if (!tabAttivo) return;
+    for (const p of tabAttivo.panes) {
+      const r = refsTerm[p.pid];
+      if (r && r[fn]) r[fn](...args);
+    }
   };
+
+  // Conferma la chiave del server e ritenta la connessione.
+  function accettaHostKey() {
+    const modo = hostKey.stato === "cambiata" ? "sostituisci" : "accetta";
+    refsTerm[hostKey.id]?.riprovaConFiducia(modo);
+    hostKey = null;
+  }
 
   // Esporta la rubrica su file.
   async function esporta() {
@@ -259,12 +306,14 @@
         <div class="tab" style="color:#ffd43b" title="Broadcast attivo">📢 broadcast</div>
       {/if}
       {#if tabAttivo}
-        {#if !tabAttivo.connesso}
+        {#if tabAttivo.panes.some((p) => !p.connesso)}
           <button class="strumento" title="Riconnetti" onclick={() => azione("riconnetti")}>↻ Riconnetti</button>
         {/if}
         <button class="strumento" title="Pulisci schermo" onclick={() => azione("pulisci")}>🧹</button>
         <button class="strumento" title="Riduci testo" onclick={() => azione("zoom", -1)}>A−</button>
         <button class="strumento" title="Ingrandisci testo" onclick={() => azione("zoom", 1)}>A+</button>
+        <button class="strumento" title="Dividi affiancato" onclick={() => split("h")}>▦</button>
+        <button class="strumento" title="Dividi impilato" onclick={() => split("v")}>▤</button>
         <button class="strumento" title="Duplica scheda" onclick={() => duplica(tabAttivo)}>⧉</button>
         {#if tabAttivo.tipo === "ssh"}
           <button class="strumento" title="Tunnel SSH" onclick={() => (mostraTunnel = true)}>🚇 Tunnel</button>
@@ -286,18 +335,26 @@
             ? ''
             : 'solo-term'}"
         >
-          <div class="term-wrap">
-            <Terminale
-              bind:this={refsTerm[t.id]}
-              tab={t}
-              attivo={t.id === tabAttivoId}
-              {invia}
-              onConnesso={() => (t.connesso = true)}
-              onChiuso={() => (t.connesso = false)}
-            />
+          <div class="area-terminali" style={grigliaPannelli(t)}>
+            {#each t.panes as p (p.pid)}
+              <div class="term-wrap">
+                {#if t.panes.length > 1}
+                  <button class="chiudi-pane" title="Chiudi pannello" onclick={() => chiudiPane(t, p.pid)}>✕</button>
+                {/if}
+                <Terminale
+                  bind:this={refsTerm[p.pid]}
+                  tab={{ ...t, id: p.pid }}
+                  attivo={t.id === tabAttivoId}
+                  {invia}
+                  onConnesso={() => (p.connesso = true)}
+                  onChiuso={() => (p.connesso = false)}
+                  onHostKey={(info) => (hostKey = info)}
+                />
+              </div>
+            {/each}
           </div>
           {#if t.tipo === "ssh"}
-            <Sftp id={t.id} pronto={t.connesso} />
+            <Sftp id={t.panes[0].pid} pronto={t.panes[0].connesso} />
           {/if}
         </div>
       {/each}
@@ -331,4 +388,35 @@
 
 {#if mostraInfo}
   <Info onChiudi={() => (mostraInfo = false)} />
+{/if}
+
+{#if hostKey}
+  <div class="overlay" onclick={() => (hostKey = null)}>
+    <div class="modale" onclick={(e) => e.stopPropagation()}>
+      <h2>
+        {hostKey.stato === "cambiata" ? "⚠️ Chiave del server CAMBIATA" : "🔑 Server sconosciuto"}
+      </h2>
+      {#if hostKey.stato === "cambiata"}
+        <p style="color:#ff8787">
+          La chiave del server è diversa da quella memorizzata! Potrebbe essere un attacco
+          (man-in-the-middle), oppure il server è stato reinstallato. Procedi solo se sai perché.
+        </p>
+      {:else}
+        <p style="color:var(--testo2)">
+          È la prima volta che ti colleghi a questo server. Verifica che l'impronta corrisponda
+          a quella attesa prima di fidarti.
+        </p>
+      {/if}
+      <div class="campo">
+        <label>Impronta (SHA256)</label>
+        <input readonly value={hostKey.impronta} />
+      </div>
+      <div class="pulsanti">
+        <button onclick={() => (hostKey = null)}>Annulla</button>
+        <button class="primario" onclick={accettaHostKey}>
+          {hostKey.stato === "cambiata" ? "Sostituisci e connetti" : "Fidati e connetti"}
+        </button>
+      </div>
+    </div>
+  </div>
 {/if}
