@@ -1,0 +1,20 @@
+# Crate "core": tutta la logica riutilizzabile (SSH, SFTP, storage sessioni).
+# Non dipende da Tauri, così potrà essere usato anche da un eventuale server web.
+[package]
+name = "oxiterm-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# Runtime async: SSH/SFTP sono interamente asincroni.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+# Client SSH puro Rust (niente OpenSSL di sistema): ottimo per pacchettizzare ovunque.
+russh = "0.54"
+# Sottosistema SFTP sopra a russh.
+russh-sftp = "2"
+
+[dev-dependencies]
+tempfile = "3"

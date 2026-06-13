@@ -1,0 +1,318 @@
+/* Tema scuro di base, ispirato a MobaXterm. */
+:root {
+  --sfondo: #1e1e1e;
+  --sfondo2: #252526;
+  --sfondo3: #2d2d30;
+  --bordo: #3c3c3c;
+  --testo: #d4d4d4;
+  --testo2: #9b9b9b;
+  --accento: #2f9e44;
+  --accento2: #37b24d;
+  --pericolo: #e03131;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--sfondo);
+  color: var(--testo);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+}
+
+button {
+  font: inherit;
+  color: var(--testo);
+  background: var(--sfondo3);
+  border: 1px solid var(--bordo);
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+button:hover {
+  background: #3a3a3d;
+}
+button.primario {
+  background: var(--accento);
+  border-color: var(--accento2);
+  color: white;
+}
+button.primario:hover {
+  background: var(--accento2);
+}
+button.pericolo {
+  color: #ff8787;
+}
+
+input,
+select {
+  font: inherit;
+  color: var(--testo);
+  background: var(--sfondo);
+  border: 1px solid var(--bordo);
+  border-radius: 4px;
+  padding: 5px 8px;
+  width: 100%;
+}
+
+/* Layout generale: sidebar + area principale */
+.app {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  height: 100vh;
+}
+
+/* ---- Sidebar / session manager ---- */
+.sidebar {
+  background: var(--sfondo2);
+  border-right: 1px solid var(--bordo);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar h1 {
+  font-size: 16px;
+  margin: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--bordo);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sidebar h1 .pallino {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accento);
+}
+.sidebar .azioni {
+  padding: 10px 12px;
+}
+.sidebar .azioni button {
+  width: 100%;
+}
+.lista-sessioni {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+}
+.voce-sessione {
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.voce-sessione:hover {
+  background: var(--sfondo3);
+}
+.voce-sessione .nome {
+  font-weight: 600;
+}
+.voce-sessione .dett {
+  color: var(--testo2);
+  font-size: 11px;
+}
+.voce-sessione .x {
+  align-self: flex-end;
+  margin-top: -18px;
+  opacity: 0;
+  font-size: 11px;
+  padding: 1px 6px;
+}
+.voce-sessione:hover .x {
+  opacity: 1;
+}
+.vuoto {
+  color: var(--testo2);
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* ---- Area principale ---- */
+.principale {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tabbar {
+  display: flex;
+  background: var(--sfondo2);
+  border-bottom: 1px solid var(--bordo);
+  min-height: 36px;
+  overflow-x: auto;
+}
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-right: 1px solid var(--bordo);
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--testo2);
+}
+.tab.attivo {
+  background: var(--sfondo);
+  color: var(--testo);
+}
+.tab .x {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  color: var(--testo2);
+}
+.tab .x:hover {
+  color: var(--pericolo);
+}
+
+/* Contenuto del tab: terminale + pannello SFTP affiancati */
+.contenuto {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+.pannello-tab {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr 360px;
+}
+.pannello-tab.nascosto {
+  display: none;
+}
+.term-wrap {
+  background: #1e1e1e;
+  overflow: hidden;
+  padding: 4px;
+}
+.term {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- Pannello SFTP ---- */
+.sftp {
+  background: var(--sfondo2);
+  border-left: 1px solid var(--bordo);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sftp .barra {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--bordo);
+}
+.sftp .barra button {
+  padding: 4px 8px;
+}
+.sftp .percorso {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--testo2);
+  border-bottom: 1px solid var(--bordo);
+  word-break: break-all;
+}
+.sftp .lista {
+  flex: 1;
+  overflow-y: auto;
+}
+.riga-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.riga-file:hover {
+  background: var(--sfondo3);
+}
+.riga-file .icona {
+  width: 16px;
+  text-align: center;
+}
+.riga-file .nome {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.riga-file .dim {
+  color: var(--testo2);
+  font-size: 11px;
+}
+.riga-file .ops {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+}
+.riga-file:hover .ops {
+  opacity: 1;
+}
+.riga-file .ops button {
+  padding: 1px 5px;
+  font-size: 11px;
+}
+
+/* ---- Form nuova connessione (overlay) ---- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.modale {
+  background: var(--sfondo2);
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  padding: 20px;
+  width: 380px;
+}
+.modale h2 {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+.campo {
+  margin-bottom: 10px;
+}
+.campo label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--testo2);
+  font-size: 12px;
+}
+.riga {
+  display: flex;
+  gap: 8px;
+}
+.modale .pulsanti {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.benvenuto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--testo2);
+  flex-direction: column;
+  gap: 10px;
+}

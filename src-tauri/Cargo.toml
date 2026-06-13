@@ -1,0 +1,28 @@
+[package]
+name = "oxiterm"
+version = "0.1.0"
+description = "Oxiterm - terminale SSH/SFTP a schede"
+authors = ["Antonio Russo"]
+license = "MIT"
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "oxiterm_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-dialog = "2"
+# La logica vera (SSH/SFTP) vive nel crate "core".
+oxiterm-core = { path = "../core" }
+# Per i canali e i Mutex asincroni usati nello stato condiviso.
+tokio = { version = "1", features = ["sync"] }

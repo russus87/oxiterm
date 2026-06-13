@@ -1,0 +1,5 @@
+# Workspace Cargo di Oxiterm: la logica (core) e l'app desktop (src-tauri).
+# Stessa struttura di rustman: il "core" è Rust puro e non dipende da Tauri.
+[workspace]
+members = ["core", "src-tauri"]
+resolver = "2"

@@ -1,0 +1,10 @@
+# Dipendenze e build del frontend
+/node_modules
+/dist
+
+# Build di Rust/Cargo
+/target
+
+# File di sistema
+.DS_Store
+*.log
