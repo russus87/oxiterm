@@ -40,3 +40,41 @@ pub fn carica_snippet(file: &Path) -> Vec<Snippet> {
 pub fn salva_snippet(file: &Path, snippet: &[Snippet]) -> Result<(), String> {
     salva(file, snippet)
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::model::{Sessione, TipoSessione};
+
+    #[test]
+    fn salva_e_ricarica() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("sessioni.json");
+        assert!(carica_sessioni(&file).is_empty());
+
+        let s = Sessione {
+            id: "1".into(),
+            nome: "prova".into(),
+            tipo: TipoSessione::Ssh,
+            host: "esempio.com".into(),
+            porta: 22,
+            utente: "root".into(),
+            chiave: None,
+            gruppo: Some("g".into()),
+            colore: None,
+            porta_seriale: None,
+            baud: None,
+            tags: vec!["a".into(), "b".into()],
+            jump_host: None,
+            jump_porta: None,
+            jump_utente: None,
+            jump_chiave: None,
+        };
+        salva_sessioni(&file, &[s]).unwrap();
+
+        let ricaricate = carica_sessioni(&file);
+        assert_eq!(ricaricate.len(), 1);
+        assert_eq!(ricaricate[0].nome, "prova");
+        assert_eq!(ricaricate[0].tags, vec!["a", "b"]);
+    }
+}

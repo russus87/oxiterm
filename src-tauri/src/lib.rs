@@ -7,9 +7,11 @@
 //! `term-dati-<id>`; alla chiusura si emette `term-chiuso-<id>`.
 
 mod git_sync;
+mod vault;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use oxiterm_core::model::{Auth, JumpConfig, Sessione, Snippet, VoceFile};
 use oxiterm_core::ssh::{Connessione, ModoFiducia, SftpSession, StopTunnel};
@@ -38,6 +40,8 @@ struct TunnelView {
 
 /// File di log della sessione (se attivo). Condiviso col task di inoltro output.
 type LogSessione = std::sync::Arc<std::sync::Mutex<Option<std::fs::File>>>;
+/// Registrazione asciicast (file + istante di inizio).
+type RegSessione = std::sync::Arc<std::sync::Mutex<Option<(std::fs::File, Instant)>>>;
 
 /// Una sessione attualmente aperta (di qualsiasi tipo).
 struct SessioneAttiva {
@@ -47,6 +51,7 @@ struct SessioneAttiva {
     sftp: Option<SftpSession>,
     tunnel: Vec<TunnelAttivo>,
     log: LogSessione,
+    reg: RegSessione,
 }
 
 /// Avanzamento di un trasferimento SFTP, inviato alla UI.
@@ -94,6 +99,16 @@ fn file_snippet(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join("snippet.json"))
 }
 
+/// File del vault cifrato.
+fn file_vault(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    Ok(dir.join("vault.json"))
+}
+
+/// Chiave del vault in memoria (presente solo dopo lo sblocco).
+#[derive(Default)]
+struct StatoVault(std::sync::Mutex<Option<[u8; 32]>>);
+
 /// Avvia l'inoltro dell'output del canale verso la UI e registra la sessione.
 async fn registra(
     app: &tauri::AppHandle,
@@ -105,17 +120,30 @@ async fn registra(
     let input = canale.input.clone();
     let mut output = canale.output;
     let log: LogSessione = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let reg: RegSessione = std::sync::Arc::new(std::sync::Mutex::new(None));
 
     let app2 = app.clone();
     let id2 = id.clone();
     let log2 = log.clone();
+    let reg2 = reg.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(byte) = output.recv().await {
-            // Se il log è attivo, scrivi l'output anche su file.
+            // Se il log è attivo, scrivi l'output grezzo su file.
             if let Ok(mut g) = log2.lock() {
                 if let Some(f) = g.as_mut() {
                     use std::io::Write;
                     let _ = f.write_all(&byte);
+                }
+            }
+            // Se è in corso una registrazione, scrivi un evento asciicast.
+            if let Ok(mut g) = reg2.lock() {
+                if let Some((f, inizio)) = g.as_mut() {
+                    use std::io::Write;
+                    let t = inizio.elapsed().as_secs_f64();
+                    let testo = String::from_utf8_lossy(&byte);
+                    if let Ok(linea) = serde_json::to_string(&(t, "o", testo.as_ref())) {
+                        let _ = writeln!(f, "{linea}");
+                    }
                 }
             }
             let _ = app2.emit(&format!("term-dati-{id2}"), byte);
@@ -131,6 +159,7 @@ async fn registra(
             sftp: None,
             tunnel: Vec::new(),
             log,
+            reg,
         },
     );
 }
@@ -357,6 +386,70 @@ async fn term_log_ferma(stato: State<'_, Sessioni>, id: String) -> Result<(), St
         *s.log.lock().unwrap() = None;
     }
     Ok(())
+}
+
+/// Avvia la registrazione asciicast della sessione (replay successivo).
+#[tauri::command]
+async fn term_rec_avvia(
+    stato: State<'_, Sessioni>,
+    id: String,
+    percorso: String,
+) -> Result<(), String> {
+    let mappa = stato.0.lock().await;
+    let s = mappa.get(&id).ok_or("sessione inesistente")?;
+    let mut f = std::fs::File::create(&percorso).map_err(|e| e.to_string())?;
+    use std::io::Write;
+    // Intestazione asciicast v2 (dimensioni indicative).
+    writeln!(f, "{{\"version\":2,\"width\":120,\"height\":32}}").map_err(|e| e.to_string())?;
+    *s.reg.lock().unwrap() = Some((f, Instant::now()));
+    Ok(())
+}
+
+/// Ferma la registrazione.
+#[tauri::command]
+async fn term_rec_ferma(stato: State<'_, Sessioni>, id: String) -> Result<(), String> {
+    let mappa = stato.0.lock().await;
+    if let Some(s) = mappa.get(&id) {
+        *s.reg.lock().unwrap() = None;
+    }
+    Ok(())
+}
+
+/// Legge un file locale come testo (per il replay delle registrazioni).
+#[tauri::command]
+fn leggi_file(percorso: String) -> Result<String, String> {
+    std::fs::read_to_string(&percorso).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Chiavi SSH
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn genera_chiave(nome: String, commento: String) -> Result<String, String> {
+    oxiterm_core::chiavi::genera(&nome, &commento)
+}
+
+#[tauri::command]
+fn lista_chiavi() -> Vec<oxiterm_core::chiavi::ChiavePub> {
+    oxiterm_core::chiavi::lista()
+}
+
+/// Copia una chiave pubblica nel ~/.ssh/authorized_keys del server (ssh-copy-id).
+#[tauri::command]
+async fn copia_chiave(
+    stato: State<'_, Sessioni>,
+    id: String,
+    pubblica: String,
+) -> Result<String, String> {
+    let mappa = stato.0.lock().await;
+    let s = mappa.get(&id).ok_or("sessione inesistente")?;
+    let conn = s.ssh.as_ref().ok_or("serve una sessione SSH aperta")?;
+    let pulita = pubblica.replace('\'', "");
+    let cmd = format!(
+        "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '{pulita}' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && echo OK"
+    );
+    conn.esegui(&cmd).await
 }
 
 // ---------------------------------------------------------------------------
@@ -627,6 +720,65 @@ async fn sftp_scarica_coda(
     .await
 }
 
+/// Legge un file remoto come testo (editor integrato).
+#[tauri::command]
+async fn sftp_leggi_testo(
+    stato: State<'_, Sessioni>,
+    id: String,
+    remoto: String,
+) -> Result<String, String> {
+    con_sftp(&stato, &id, move |c| async move {
+        let r = sftp::leggi_testo(&c, &remoto).await;
+        (c, r)
+    })
+    .await
+}
+
+/// Salva del testo in un file remoto (editor integrato).
+#[tauri::command]
+async fn sftp_scrivi_testo(
+    stato: State<'_, Sessioni>,
+    id: String,
+    remoto: String,
+    contenuto: String,
+) -> Result<(), String> {
+    con_sftp(&stato, &id, move |c| async move {
+        let r = sftp::scrivi_testo(&c, &remoto, &contenuto).await;
+        (c, r)
+    })
+    .await
+}
+
+/// Carica ricorsivamente una cartella locale.
+#[tauri::command]
+async fn sftp_carica_cartella(
+    stato: State<'_, Sessioni>,
+    id: String,
+    locale: String,
+    remoto: String,
+) -> Result<(), String> {
+    con_sftp(&stato, &id, move |c| async move {
+        let r = sftp::carica_cartella(&c, &locale, &remoto).await;
+        (c, r)
+    })
+    .await
+}
+
+/// Scarica ricorsivamente una cartella remota.
+#[tauri::command]
+async fn sftp_scarica_cartella(
+    stato: State<'_, Sessioni>,
+    id: String,
+    remoto: String,
+    locale: String,
+) -> Result<(), String> {
+    con_sftp(&stato, &id, move |c| async move {
+        let r = sftp::scarica_cartella(&c, &remoto, &locale).await;
+        (c, r)
+    })
+    .await
+}
+
 /// Scarica un file remoto in una cartella temporanea, restituisce il percorso
 /// locale (che il frontend aprirà con l'editor di sistema) e avvia un piccolo
 /// task che lo ricarica sul server ogni volta che il file locale cambia.
@@ -751,6 +903,61 @@ fn importa_rubrica(app: tauri::AppHandle, percorso: String) -> Result<usize, Str
 }
 
 // ---------------------------------------------------------------------------
+// Vault cifrato delle password
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct StatoVaultView {
+    esiste: bool,
+    sbloccato: bool,
+}
+
+#[tauri::command]
+fn vault_stato(app: tauri::AppHandle, stato: State<'_, StatoVault>) -> Result<StatoVaultView, String> {
+    Ok(StatoVaultView {
+        esiste: vault::esiste(&file_vault(&app)?),
+        sbloccato: stato.0.lock().unwrap().is_some(),
+    })
+}
+
+#[tauri::command]
+fn vault_sblocca(
+    app: tauri::AppHandle,
+    stato: State<'_, StatoVault>,
+    master: String,
+) -> Result<(), String> {
+    let chiave = vault::sblocca(&file_vault(&app)?, &master)?;
+    *stato.0.lock().unwrap() = Some(chiave);
+    Ok(())
+}
+
+#[tauri::command]
+fn vault_blocca(stato: State<'_, StatoVault>) {
+    *stato.0.lock().unwrap() = None;
+}
+
+#[tauri::command]
+fn vault_salva_password(
+    app: tauri::AppHandle,
+    stato: State<'_, StatoVault>,
+    id: String,
+    password: String,
+) -> Result<(), String> {
+    let chiave = (*stato.0.lock().unwrap()).ok_or("vault bloccato")?;
+    vault::salva_password(&file_vault(&app)?, &chiave, &id, &password)
+}
+
+#[tauri::command]
+fn vault_leggi_password(
+    app: tauri::AppHandle,
+    stato: State<'_, StatoVault>,
+    id: String,
+) -> Result<Option<String>, String> {
+    let chiave = (*stato.0.lock().unwrap()).ok_or("vault bloccato")?;
+    vault::leggi_password(&file_vault(&app)?, &chiave, &id)
+}
+
+// ---------------------------------------------------------------------------
 // Sincronizzazione cloud (Git)
 // ---------------------------------------------------------------------------
 
@@ -817,6 +1024,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(Sessioni::default())
         .manage(StatoVnc::default())
+        .manage(StatoVault::default())
         .invoke_handler(tauri::generate_handler![
             ssh_connetti,
             apri_locale,
@@ -832,6 +1040,12 @@ pub fn run() {
             term_chiudi,
             term_log_avvia,
             term_log_ferma,
+            term_rec_avvia,
+            term_rec_ferma,
+            leggi_file,
+            genera_chiave,
+            lista_chiavi,
+            copia_chiave,
             tunnel_locale,
             tunnel_socks,
             tunnel_remoto,
@@ -847,6 +1061,10 @@ pub fn run() {
             sftp_carica_coda,
             sftp_scarica_coda,
             sftp_apri_editor,
+            sftp_leggi_testo,
+            sftp_scrivi_testo,
+            sftp_carica_cartella,
+            sftp_scarica_cartella,
             lista_sessioni,
             salva_sessione,
             elimina_sessione,
@@ -859,6 +1077,11 @@ pub fn run() {
             sync_imposta_remote,
             sync_push,
             sync_pull,
+            vault_stato,
+            vault_sblocca,
+            vault_blocca,
+            vault_salva_password,
+            vault_leggi_password,
         ])
         .run(tauri::generate_context!())
         .expect("errore durante l'avvio di Oxiterm");

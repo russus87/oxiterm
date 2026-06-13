@@ -8,6 +8,7 @@
 //! - `seriale` console seriale (porte COM / tty)
 //! - `storage` salvataggio/lettura delle sessioni salvate (session manager)
 
+pub mod chiavi;
 pub mod locale;
 pub mod model;
 pub mod seriale;

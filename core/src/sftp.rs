@@ -112,3 +112,65 @@ pub async fn elimina(sftp: &SftpSession, percorso: &str, dir: bool) -> Result<()
 pub async fn rinomina(sftp: &SftpSession, da: &str, a: &str) -> Result<(), String> {
     sftp.rename(da, a).await.map_err(|e| e.to_string())
 }
+
+/// Legge un file remoto come testo (per l'editor integrato).
+pub async fn leggi_testo(sftp: &SftpSession, remoto: &str) -> Result<String, String> {
+    let mut f = sftp.open(remoto).await.map_err(|e| e.to_string())?;
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf).await.map_err(|e| e.to_string())?;
+    Ok(String::from_utf8_lossy(&buf).to_string())
+}
+
+/// Scrive testo in un file remoto (sovrascrive).
+pub async fn scrivi_testo(sftp: &SftpSession, remoto: &str, contenuto: &str) -> Result<(), String> {
+    let mut f = sftp.create(remoto).await.map_err(|e| e.to_string())?;
+    f.write_all(contenuto.as_bytes())
+        .await
+        .map_err(|e| e.to_string())?;
+    f.flush().await.map_err(|e| e.to_string())
+}
+
+/// Carica ricorsivamente una cartella locale su una remota.
+pub async fn carica_cartella(
+    sftp: &SftpSession,
+    locale_dir: &str,
+    remoto_dir: &str,
+) -> Result<(), String> {
+    let _ = sftp.create_dir(remoto_dir).await; // ok se esiste già
+    let mut voci = tokio::fs::read_dir(locale_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    while let Some(e) = voci.next_entry().await.map_err(|e| e.to_string())? {
+        let nome = e.file_name().to_string_lossy().to_string();
+        let percorso = e.path().to_string_lossy().to_string();
+        let remoto = format!("{remoto_dir}/{nome}");
+        let tipo = e.file_type().await.map_err(|e| e.to_string())?;
+        if tipo.is_dir() {
+            Box::pin(carica_cartella(sftp, &percorso, &remoto)).await?;
+        } else {
+            carica(sftp, &percorso, &remoto).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Scarica ricorsivamente una cartella remota su una locale.
+pub async fn scarica_cartella(
+    sftp: &SftpSession,
+    remoto_dir: &str,
+    locale_dir: &str,
+) -> Result<(), String> {
+    tokio::fs::create_dir_all(locale_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    for v in lista(sftp, remoto_dir).await? {
+        let remoto = format!("{remoto_dir}/{}", v.nome);
+        let locale = format!("{locale_dir}/{}", v.nome);
+        if v.dir {
+            Box::pin(scarica_cartella(sftp, &remoto, &locale)).await?;
+        } else {
+            scarica(sftp, &remoto, &locale).await?;
+        }
+    }
+    Ok(())
+}

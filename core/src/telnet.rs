@@ -115,3 +115,34 @@ fn filtra_iac(dati: &[u8]) -> (Vec<u8>, Vec<u8>) {
     }
     (puliti, risposte)
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn dati_normali_passano() {
+        let (puliti, risposte) = filtra_iac(b"ciao");
+        assert_eq!(puliti, b"ciao");
+        assert!(risposte.is_empty());
+    }
+
+    #[test]
+    fn iac_do_riceve_wont() {
+        let (puliti, risposte) = filtra_iac(&[IAC, DO, 1, b'x']);
+        assert_eq!(puliti, vec![b'x']);
+        assert_eq!(risposte, vec![IAC, WONT, 1]);
+    }
+
+    #[test]
+    fn iac_will_riceve_dont() {
+        let (_, risposte) = filtra_iac(&[IAC, WILL, 3]);
+        assert_eq!(risposte, vec![IAC, DONT, 3]);
+    }
+
+    #[test]
+    fn iac_doppio_diventa_un_byte() {
+        let (puliti, _) = filtra_iac(&[IAC, IAC, b'a']);
+        assert_eq!(puliti, vec![0xFF, b'a']);
+    }
+}

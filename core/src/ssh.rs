@@ -294,6 +294,28 @@ impl Connessione {
         })
     }
 
+    /// Esegue un comando remoto e restituisce il suo output (stdout+stderr).
+    pub async fn esegui(&self, comando: &str) -> Result<String, String> {
+        let mut canale = self
+            .handle
+            .lock()
+            .await
+            .channel_open_session()
+            .await
+            .map_err(|e| e.to_string())?;
+        canale.exec(true, comando).await.map_err(|e| e.to_string())?;
+        let mut out = Vec::new();
+        loop {
+            match canale.wait().await {
+                Some(ChannelMsg::Data { data }) => out.extend_from_slice(&data),
+                Some(ChannelMsg::ExtendedData { data, .. }) => out.extend_from_slice(&data),
+                Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
+                _ => {}
+            }
+        }
+        Ok(String::from_utf8_lossy(&out).to_string())
+    }
+
     /// Apre un canale SFTP sulla stessa connessione.
     pub async fn apri_sftp(&self) -> Result<SftpSession, String> {
         let canale = self

@@ -219,3 +219,23 @@ fn componente(px: u32, shift: u8, max: u16) -> u8 {
     let v = (px >> shift) & (max as u32);
     ((v * 255) / (max as u32)) as u8
 }
+
+#[cfg(test)]
+mod test {
+    use super::componente;
+
+    #[test]
+    fn estrae_e_scala_il_canale() {
+        // Pixel 0xRRGGBB con canali a 8 bit (max 255).
+        let px = 0x00_80_40_u32; // r=0x00? no: shift 16 -> 0, 8 -> 0x80, 0 -> 0x40
+        assert_eq!(componente(px, 8, 255), 0x80);
+        assert_eq!(componente(px, 0, 255), 0x40);
+        assert_eq!(componente(px, 16, 255), 0x00);
+    }
+
+    #[test]
+    fn massimo_e_minimo() {
+        assert_eq!(componente(0xFF, 0, 255), 255);
+        assert_eq!(componente(0, 0, 255), 0);
+    }
+}

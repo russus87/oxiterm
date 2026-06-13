@@ -71,6 +71,9 @@ pub struct Sessione {
     pub porta_seriale: Option<String>,
     #[serde(default)]
     pub baud: Option<u32>,
+    /// Etichette libere per filtrare/organizzare le sessioni.
+    #[serde(default)]
+    pub tags: Vec<String>,
     /// Host intermedio (jump/bastion) opzionale, senza segreti.
     #[serde(default)]
     pub jump_host: Option<String>,
