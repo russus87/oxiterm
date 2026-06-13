@@ -425,6 +425,35 @@ fn elimina_sessione(app: tauri::AppHandle, id: String) -> Result<(), String> {
     storage::salva_sessioni(&file, &tutte)
 }
 
+/// Esporta la rubrica delle sessioni in un file JSON scelto dall'utente.
+#[tauri::command]
+fn esporta_rubrica(app: tauri::AppHandle, percorso: String) -> Result<(), String> {
+    let tutte = storage::carica_sessioni(&file_sessioni(&app)?);
+    let testo = serde_json::to_string_pretty(&tutte).map_err(|e| e.to_string())?;
+    std::fs::write(&percorso, testo).map_err(|e| e.to_string())
+}
+
+/// Importa sessioni da un file JSON e le unisce alla rubrica (per id).
+#[tauri::command]
+fn importa_rubrica(app: tauri::AppHandle, percorso: String) -> Result<usize, String> {
+    let testo = std::fs::read_to_string(&percorso).map_err(|e| e.to_string())?;
+    let nuove: Vec<Sessione> = serde_json::from_str(&testo).map_err(|e| e.to_string())?;
+    let file = file_sessioni(&app)?;
+    let mut tutte = storage::carica_sessioni(&file);
+    let mut aggiunte = 0;
+    for n in nuove {
+        match tutte.iter_mut().find(|s| s.id == n.id) {
+            Some(esistente) => *esistente = n,
+            None => {
+                tutte.push(n);
+                aggiunte += 1;
+            }
+        }
+    }
+    storage::salva_sessioni(&file, &tutte)?;
+    Ok(aggiunte)
+}
+
 // ---------------------------------------------------------------------------
 // Snippet / macro
 // ---------------------------------------------------------------------------
@@ -482,6 +511,8 @@ pub fn run() {
             lista_sessioni,
             salva_sessione,
             elimina_sessione,
+            esporta_rubrica,
+            importa_rubrica,
             lista_snippet,
             salva_snippet,
             elimina_snippet,

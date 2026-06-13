@@ -3,6 +3,7 @@
   // con terminale e, per le sessioni SSH, pannello SFTP. Gestisce impostazioni,
   // tunnel e broadcast dell'input.
   import { onMount } from "svelte";
+  import { open as apriFile, save as salvaFile } from "@tauri-apps/plugin-dialog";
   import * as api from "./lib/api.js";
   import { impostazioni } from "./lib/impostazioni.svelte.js";
   import Terminale from "./components/Terminale.svelte";
@@ -11,6 +12,7 @@
   import Impostazioni from "./components/Impostazioni.svelte";
   import Tunnel from "./components/Tunnel.svelte";
   import Snippet from "./components/Snippet.svelte";
+  import Info from "./components/Info.svelte";
 
   let sessioni = $state([]); // rubrica salvata
   let tabs = $state([]); // sessioni aperte
@@ -21,6 +23,10 @@
   let mostraImpostazioni = $state(false);
   let mostraTunnel = $state(false);
   let mostraSnippet = $state(false);
+  let mostraInfo = $state(false);
+
+  // Riferimenti ai componenti Terminale, per chiamarne le funzioni (pulisci, zoom…).
+  let refsTerm = {};
 
   const tabAttivo = $derived(tabs.find((t) => t.id === tabAttivoId) ?? null);
 
@@ -134,6 +140,7 @@
 
   async function chiudiTab(id) {
     await api.termChiudi(id).catch(() => {});
+    delete refsTerm[id];
     const i = tabs.findIndex((t) => t.id === id);
     tabs = tabs.filter((t) => t.id !== id);
     if (tabAttivoId === id) {
@@ -155,6 +162,38 @@
     if (tabAttivo) api.termScrivi(tabAttivo.id, comando + "\n");
   }
 
+  // Apre una nuova scheda con gli stessi parametri di una esistente.
+  function duplica(t) {
+    const copia = { ...t, id: crypto.randomUUID(), connesso: false };
+    tabs.push(copia);
+    tabAttivoId = copia.id;
+  }
+
+  // Azioni sul terminale attivo (delegano al componente via ref).
+  const azione = (fn, ...args) => {
+    const r = refsTerm[tabAttivoId];
+    if (r && r[fn]) r[fn](...args);
+  };
+
+  // Esporta la rubrica su file.
+  async function esporta() {
+    const dest = await salvaFile({ defaultPath: "oxiterm-sessioni.json" });
+    if (dest) await api.esportaRubrica(dest).catch((e) => alert(e));
+  }
+
+  // Importa la rubrica da file e ricarica.
+  async function importa() {
+    const f = await apriFile({ multiple: false });
+    if (!f) return;
+    try {
+      const n = await api.importaRubrica(f);
+      await caricaSessioni();
+      alert(`Importate ${n} nuove sessioni.`);
+    } catch (e) {
+      alert(e);
+    }
+  }
+
   function icona(tipo) {
     return { ssh: "🔐", locale: "💻", telnet: "🌐", seriale: "🔌" }[tipo] || "🖥";
   }
@@ -166,6 +205,10 @@
     <h1><span class="pallino"></span> Oxiterm</h1>
     <div class="azioni">
       <button class="primario" onclick={nuovaConnessione}>+ Nuova sessione</button>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button style="flex:1" title="Importa rubrica" onclick={importa}>⬇ Importa</button>
+        <button style="flex:1" title="Esporta rubrica" onclick={esporta}>⬆ Esporta</button>
+      </div>
     </div>
     <div class="lista-sessioni">
       {#each gruppi as [nomeGruppo, lista] (nomeGruppo)}
@@ -194,7 +237,8 @@
     </div>
     <div class="azioni" style="display:flex;gap:6px">
       <button style="flex:1" onclick={() => (mostraSnippet = true)}>✂ Snippet</button>
-      <button style="flex:1" onclick={() => (mostraImpostazioni = true)}>⚙ Impostazioni</button>
+      <button style="flex:1" onclick={() => (mostraImpostazioni = true)}>⚙ Opzioni</button>
+      <button title="Info" onclick={() => (mostraInfo = true)}>ℹ</button>
     </div>
   </aside>
 
@@ -214,10 +258,17 @@
       {#if impostazioni.broadcast}
         <div class="tab" style="color:#ffd43b" title="Broadcast attivo">📢 broadcast</div>
       {/if}
-      {#if tabAttivo?.tipo === "ssh"}
-        <button class="strumento" title="Tunnel SSH" onclick={() => (mostraTunnel = true)}>
-          🚇 Tunnel
-        </button>
+      {#if tabAttivo}
+        {#if !tabAttivo.connesso}
+          <button class="strumento" title="Riconnetti" onclick={() => azione("riconnetti")}>↻ Riconnetti</button>
+        {/if}
+        <button class="strumento" title="Pulisci schermo" onclick={() => azione("pulisci")}>🧹</button>
+        <button class="strumento" title="Riduci testo" onclick={() => azione("zoom", -1)}>A−</button>
+        <button class="strumento" title="Ingrandisci testo" onclick={() => azione("zoom", 1)}>A+</button>
+        <button class="strumento" title="Duplica scheda" onclick={() => duplica(tabAttivo)}>⧉</button>
+        {#if tabAttivo.tipo === "ssh"}
+          <button class="strumento" title="Tunnel SSH" onclick={() => (mostraTunnel = true)}>🚇 Tunnel</button>
+        {/if}
       {/if}
     </div>
 
@@ -237,6 +288,7 @@
         >
           <div class="term-wrap">
             <Terminale
+              bind:this={refsTerm[t.id]}
               tab={t}
               attivo={t.id === tabAttivoId}
               {invia}
@@ -275,4 +327,8 @@
     attivoPresente={!!tabAttivo}
     onChiudi={() => (mostraSnippet = false)}
   />
+{/if}
+
+{#if mostraInfo}
+  <Info onChiudi={() => (mostraInfo = false)} />
 {/if}

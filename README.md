@@ -47,14 +47,25 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
+## Funzionalità (dalla v0.2.0)
+
+- [x] Verifica `known_hosts` (TOFU) + keepalive SSH
+- [x] Tunnel / port forwarding SSH (locale -L e SOCKS5 dinamico -D)
+- [x] Terminale locale (PTY) e Telnet
+- [x] Seriale
+- [x] Snippet/macro, broadcast input, ricerca, temi colore, impostazioni
+- [x] Gruppi e colori nella rubrica; import/export
+- [x] SFTP con breadcrumb, percorso modificabile, stato trasferimenti
+- [x] Azioni scheda: riconnetti, duplica, pulisci, zoom
+
 ## Roadmap
 
-- [ ] Verifica `known_hosts` (oggi accetta qualsiasi chiave del server)
-- [ ] Tunnel / port forwarding SSH
-- [ ] Terminale locale (PTY) e Telnet
-- [ ] Seriale
-- [ ] Macro e split dei pannelli
+- [ ] Forward remoto SSH (-R)
+- [ ] Apertura file remoti in editor (download temporaneo + ricarica)
+- [ ] Split dei pannelli
 - [ ] Client RDP/VNC
+
+Vedi `IMPLEMENTAZIONI.md` per il diario dettagliato di tutto ciò che è stato fatto.
 
 ## Licenza
 

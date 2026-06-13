@@ -106,6 +106,32 @@
     else search.findPrevious(testoCerca);
   }
 
+  // ---- Funzioni esposte ad App (via bind:this) ----
+
+  // Pulisce lo schermo del terminale.
+  export function pulisci() {
+    term?.clear();
+  }
+
+  // Cambia la dimensione del carattere (zoom).
+  export function zoom(delta) {
+    impostazioni.fontSize = Math.max(8, Math.min(32, impostazioni.fontSize + delta));
+  }
+
+  // Riavvia la connessione (utile dopo una disconnessione).
+  export async function riconnetti() {
+    if (!term) return;
+    term.write("\r\n\x1b[33m[riconnessione…]\x1b[0m\r\n");
+    try {
+      await avvia();
+      onConnesso?.();
+      term.focus();
+    } catch (e) {
+      term.write(`\r\n\x1b[31mErrore: ${e}\x1b[0m\r\n`);
+      onErrore?.(String(e));
+    }
+  }
+
   // Riapplica le impostazioni a caldo quando cambiano.
   $effect(() => {
     if (!term) return;

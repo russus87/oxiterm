@@ -57,12 +57,29 @@ Legenda: ✅ fatto · 🚧 in corso · ⏳ pianificato · ❌ fuori scope
 - ✅ Libreria di comandi salvati (`components/Snippet.svelte`, backend `storage.rs`),
   inviabili al terminale attivo con un clic
 
-## Extra
+## Extra ✅
 
 - ✅ Keepalive SSH (15s) per connessioni stabili
-- ⏳ Azioni per scheda: riconnetti, duplica, pulisci, zoom
-- ⏳ Import/Export della rubrica sessioni
-- ⏳ Pannello Info con versione e changelog
+- ✅ Azioni per scheda: riconnetti, duplica, pulisci, zoom (A+/A−)
+- ✅ Import/Export della rubrica sessioni (comandi backend + UI)
+- ✅ Pannello Info con versione (0.2.0) e changelog
+
+---
+
+## Stato build (verificato)
+
+- `cargo check --workspace` ✅
+- `cargo build -p oxiterm` ✅ (binario `target/debug/oxiterm` prodotto, ~241 MB debug)
+- `npm run build` ✅
+- GUI non avviata in automatico (richiede display): da provare con `cargo tauri dev`
+
+## Da fare / idee future
+
+- Forward remoto SSH (-R)
+- Apertura file remoti in un editor (download temporaneo + ricarica)
+- Verifica known_hosts interattiva (oggi: rifiuto automatico se la chiave cambia)
+- Split dei pannelli (più terminali nella stessa scheda)
+- Client RDP/VNC
 
 ## Fuori scope (non clonabili realisticamente)
 

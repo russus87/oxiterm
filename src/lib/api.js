@@ -53,6 +53,8 @@ export const sftpRinomina = (id, da, a) => invoke("sftp_rinomina", { id, da, a }
 export const listaSessioni = () => invoke("lista_sessioni");
 export const salvaSessione = (sessione) => invoke("salva_sessione", { sessione });
 export const eliminaSessione = (id) => invoke("elimina_sessione", { id });
+export const esportaRubrica = (percorso) => invoke("esporta_rubrica", { percorso });
+export const importaRubrica = (percorso) => invoke("importa_rubrica", { percorso });
 
 // ---- Snippet / macro ----
 export const listaSnippet = () => invoke("lista_snippet");
