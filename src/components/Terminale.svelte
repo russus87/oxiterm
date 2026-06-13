@@ -8,6 +8,7 @@
   import { SearchAddon } from "@xterm/addon-search";
   import { WebLinksAddon } from "@xterm/addon-web-links";
   import { listen } from "@tauri-apps/api/event";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import * as api from "../lib/api.js";
   import { impostazioni } from "../lib/impostazioni.svelte.js";
   import { temi } from "../lib/temi.js";
@@ -35,7 +36,8 @@
     search = new SearchAddon();
     term.loadAddon(fit);
     term.loadAddon(search);
-    term.loadAddon(new WebLinksAddon());
+    // I link cliccabili si aprono nel browser di sistema (non nella webview).
+    term.loadAddon(new WebLinksAddon((_e, uri) => openUrl(uri)));
     term.open(elemento);
     fit.fit();
 
