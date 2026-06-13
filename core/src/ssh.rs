@@ -86,7 +86,11 @@ impl Connessione {
         auth: Auth,
         known_hosts: PathBuf,
     ) -> Result<Self, String> {
-        let config = Arc::new(client::Config::default());
+        // Keepalive: un "ping" ogni 15s evita che il firewall chiuda la sessione.
+        let config = Arc::new(client::Config {
+            keepalive_interval: Some(std::time::Duration::from_secs(15)),
+            ..Default::default()
+        });
         let gestore = Gestore {
             conosciuti: known_hosts,
             etichetta: format!("{host}:{porta}"),

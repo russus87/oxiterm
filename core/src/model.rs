@@ -73,3 +73,11 @@ pub struct VoceFile {
     pub dir: bool,
     pub dimensione: u64,
 }
+
+/// Un comando salvato (snippet/macro) da inviare al terminale con un clic.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Snippet {
+    pub id: String,
+    pub nome: String,
+    pub comando: String,
+}

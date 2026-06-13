@@ -259,12 +259,33 @@ select {
 .sftp .barra button {
   padding: 4px 8px;
 }
-.sftp .percorso {
-  padding: 6px 10px;
+.sftp .briciole {
+  padding: 6px 10px 2px;
   font-size: 11px;
   color: var(--testo2);
-  border-bottom: 1px solid var(--bordo);
   word-break: break-all;
+}
+.sftp .briciola {
+  cursor: pointer;
+}
+.sftp .briciola:hover {
+  color: var(--accento2);
+  text-decoration: underline;
+}
+.sftp .sep {
+  margin: 0 2px;
+  opacity: 0.5;
+}
+.sftp .barra-percorso {
+  margin: 4px 8px 6px;
+  width: calc(100% - 16px);
+  font-size: 11px;
+  padding: 4px 6px;
+}
+.sftp .stato {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--accento2);
 }
 .sftp .lista {
   flex: 1;

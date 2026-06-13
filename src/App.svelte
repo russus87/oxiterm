@@ -10,6 +10,7 @@
   import FormConnessione from "./components/FormConnessione.svelte";
   import Impostazioni from "./components/Impostazioni.svelte";
   import Tunnel from "./components/Tunnel.svelte";
+  import Snippet from "./components/Snippet.svelte";
 
   let sessioni = $state([]); // rubrica salvata
   let tabs = $state([]); // sessioni aperte
@@ -19,6 +20,7 @@
   let formIniziale = $state(null);
   let mostraImpostazioni = $state(false);
   let mostraTunnel = $state(false);
+  let mostraSnippet = $state(false);
 
   const tabAttivo = $derived(tabs.find((t) => t.id === tabAttivoId) ?? null);
 
@@ -61,6 +63,7 @@
       porta_seriale: s.porta_seriale || "",
       baud: s.baud || 115200,
       gruppo: s.gruppo || "",
+      colore: s.colore || "#37b24d",
       salva: false,
     };
     mostraForm = true;
@@ -117,6 +120,7 @@
         utente: form.utente,
         chiave: form.metodo === "chiave" ? form.percorsoChiave : null,
         gruppo: form.gruppo || null,
+        colore: form.colore || null,
         porta_seriale: form.porta_seriale || null,
         baud: form.tipo === "seriale" ? Number(form.baud) : null,
       });
@@ -144,6 +148,11 @@
     } else {
       api.termScrivi(id, dati);
     }
+  }
+
+  // Invia un comando (snippet) al terminale attivo, con a capo finale.
+  function inviaSnippet(comando) {
+    if (tabAttivo) api.termScrivi(tabAttivo.id, comando + "\n");
   }
 
   function icona(tipo) {
@@ -183,8 +192,9 @@
         <div class="vuoto">Nessuna sessione salvata.<br />Creane una con "+ Nuova sessione".</div>
       {/each}
     </div>
-    <div class="azioni">
-      <button onclick={() => (mostraImpostazioni = true)}>⚙ Impostazioni</button>
+    <div class="azioni" style="display:flex;gap:6px">
+      <button style="flex:1" onclick={() => (mostraSnippet = true)}>✂ Snippet</button>
+      <button style="flex:1" onclick={() => (mostraImpostazioni = true)}>⚙ Impostazioni</button>
     </div>
   </aside>
 
@@ -257,4 +267,12 @@
 
 {#if mostraTunnel && tabAttivo}
   <Tunnel id={tabAttivo.id} onChiudi={() => (mostraTunnel = false)} />
+{/if}
+
+{#if mostraSnippet}
+  <Snippet
+    onInvia={inviaSnippet}
+    attivoPresente={!!tabAttivo}
+    onChiudi={() => (mostraSnippet = false)}
+  />
 {/if}

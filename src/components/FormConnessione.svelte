@@ -28,6 +28,7 @@
       porta_seriale: "",
       baud: 115200,
       gruppo: "",
+      colore: "#37b24d",
       salva: true,
     };
   }
@@ -148,9 +149,15 @@
       </div>
     {/if}
 
-    <div class="campo">
-      <label>Gruppo (facoltativo)</label>
-      <input bind:value={form.gruppo} placeholder="Es. Produzione, Casa…" />
+    <div class="riga">
+      <div class="campo" style="flex:3">
+        <label>Gruppo (facoltativo)</label>
+        <input bind:value={form.gruppo} placeholder="Es. Produzione, Casa…" />
+      </div>
+      <div class="campo" style="flex:1">
+        <label>Colore</label>
+        <input type="color" bind:value={form.colore} style="height:32px;padding:2px" />
+      </div>
     </div>
 
     <div class="campo" style="display:flex;align-items:center;gap:8px">

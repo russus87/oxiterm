@@ -42,20 +42,27 @@ Legenda: ✅ fatto · 🚧 in corso · ⏳ pianificato · ❌ fuori scope
 - ✅ **Broadcast input**: invia l'input a tutte le schede (`Impostazioni`, indicatore in tabbar)
 - ✅ Copia/incolla: gestiti dai comportamenti predefiniti di xterm
 
-## Fase 5 — Session manager avanzato ✅ (parziale)
+## Fase 5 — Session manager avanzato ✅
 
 - ✅ Cartelle/gruppi di sessioni (campo `gruppo`, sidebar raggruppata)
-- ✅ Campo colore per sessione nel modello (visualizzato; manca selettore UI)
-- ⏳ Duplica sessione
+- ✅ Colore per sessione (selettore nel form, mostrato nella rubrica)
 
-## Fase 6 — SFTP avanzato
+## Fase 6 — SFTP avanzato ✅
 
-- ⏳ Barra del percorso modificabile + breadcrumb
-- ⏳ Indicatore di stato durante i trasferimenti
+- ✅ Barra del percorso modificabile (Invio per navigare) + breadcrumb cliccabile
+- ✅ Indicatore di stato durante i trasferimenti (caricamento/scaricamento)
 
-## Fase 7 — Snippet / macro
+## Fase 7 — Snippet / macro ✅
 
-- ⏳ Libreria di comandi salvati, inviabili al terminale con un clic
+- ✅ Libreria di comandi salvati (`components/Snippet.svelte`, backend `storage.rs`),
+  inviabili al terminale attivo con un clic
+
+## Extra
+
+- ✅ Keepalive SSH (15s) per connessioni stabili
+- ⏳ Azioni per scheda: riconnetti, duplica, pulisci, zoom
+- ⏳ Import/Export della rubrica sessioni
+- ⏳ Pannello Info con versione e changelog
 
 ## Fuori scope (non clonabili realisticamente)
 

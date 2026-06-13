@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use oxiterm_core::model::{Auth, Sessione, VoceFile};
+use oxiterm_core::model::{Auth, Sessione, Snippet, VoceFile};
 use oxiterm_core::ssh::{Connessione, SftpSession, StopTunnel};
 use oxiterm_core::term::{Canale, ComandoTerm};
 use oxiterm_core::{locale, seriale, sftp, telnet, storage};
@@ -55,6 +55,12 @@ fn file_sessioni(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 fn file_known_hosts(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
     Ok(dir.join("known_hosts.json"))
+}
+
+/// File con la libreria degli snippet.
+fn file_snippet(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    Ok(dir.join("snippet.json"))
 }
 
 /// Avvia l'inoltro dell'output del canale verso la UI e registra la sessione.
@@ -419,6 +425,34 @@ fn elimina_sessione(app: tauri::AppHandle, id: String) -> Result<(), String> {
     storage::salva_sessioni(&file, &tutte)
 }
 
+// ---------------------------------------------------------------------------
+// Snippet / macro
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+fn lista_snippet(app: tauri::AppHandle) -> Result<Vec<Snippet>, String> {
+    Ok(storage::carica_snippet(&file_snippet(&app)?))
+}
+
+#[tauri::command]
+fn salva_snippet(app: tauri::AppHandle, snippet: Snippet) -> Result<(), String> {
+    let file = file_snippet(&app)?;
+    let mut tutti = storage::carica_snippet(&file);
+    match tutti.iter_mut().find(|s| s.id == snippet.id) {
+        Some(esistente) => *esistente = snippet,
+        None => tutti.push(snippet),
+    }
+    storage::salva_snippet(&file, &tutti)
+}
+
+#[tauri::command]
+fn elimina_snippet(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let file = file_snippet(&app)?;
+    let mut tutti = storage::carica_snippet(&file);
+    tutti.retain(|s| s.id != id);
+    storage::salva_snippet(&file, &tutti)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -448,6 +482,9 @@ pub fn run() {
             lista_sessioni,
             salva_sessione,
             elimina_sessione,
+            lista_snippet,
+            salva_snippet,
+            elimina_snippet,
         ])
         .run(tauri::generate_context!())
         .expect("errore durante l'avvio di Oxiterm");
