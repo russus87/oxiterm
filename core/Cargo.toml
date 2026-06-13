@@ -15,6 +15,10 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-uti
 russh = "0.54"
 # Sottosistema SFTP sopra a russh.
 russh-sftp = "2"
+# PTY locale multipiattaforma per il terminale di sistema.
+portable-pty = "0.9"
+# Porte seriali (COM / tty).
+serialport = "4"
 
 [dev-dependencies]
 tempfile = "3"

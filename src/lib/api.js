@@ -2,7 +2,7 @@
 // Rust via `invoke`. La UI usa solo queste funzioni, mai `invoke` direttamente.
 import { invoke } from "@tauri-apps/api/core";
 
-// ---- SSH / terminale ----
+// ---- Apertura sessioni ----
 export const sshConnetti = (p) =>
   invoke("ssh_connetti", {
     id: p.id,
@@ -13,10 +13,28 @@ export const sshConnetti = (p) =>
     colonne: p.colonne,
     righe: p.righe,
   });
-export const sshScrivi = (id, dati) => invoke("ssh_scrivi", { id, dati });
-export const sshRidimensiona = (id, colonne, righe) =>
-  invoke("ssh_ridimensiona", { id, colonne, righe });
-export const sshDisconnetti = (id) => invoke("ssh_disconnetti", { id });
+export const apriLocale = (id, shell, colonne, righe) =>
+  invoke("apri_locale", { id, shell: shell || null, colonne, righe });
+export const apriTelnet = (id, host, porta) =>
+  invoke("apri_telnet", { id, host, porta });
+export const apriSeriale = (id, porta, baud) =>
+  invoke("apri_seriale", { id, porta, baud });
+export const porteSeriali = () => invoke("porte_seriali");
+
+// ---- Terminale (qualsiasi tipo) ----
+export const termScrivi = (id, dati) => invoke("term_scrivi", { id, dati });
+export const termRidimensiona = (id, colonne, righe) =>
+  invoke("term_ridimensiona", { id, colonne, righe });
+export const termChiudi = (id) => invoke("term_chiudi", { id });
+
+// ---- Tunnel SSH ----
+export const tunnelLocale = (id, portaLocale, hostRemoto, portaRemota) =>
+  invoke("tunnel_locale", { id, portaLocale, hostRemoto, portaRemota });
+export const tunnelSocks = (id, portaLocale) =>
+  invoke("tunnel_socks", { id, portaLocale });
+export const listaTunnel = (id) => invoke("lista_tunnel", { id });
+export const fermaTunnel = (id, tunnelId) =>
+  invoke("ferma_tunnel", { id, tunnelId });
 
 // ---- SFTP ----
 export const sftpHome = (id) => invoke("sftp_home", { id });

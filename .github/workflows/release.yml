@@ -50,7 +50,8 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            cmake
+            cmake \
+            libudev-dev
 
       - name: Installa dipendenze frontend
         run: npm install

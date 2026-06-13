@@ -1,42 +1,98 @@
 //! Livello desktop di Oxiterm: espone i comandi richiamabili dal frontend e
 //! fa da ponte tra la UI e il crate `oxiterm_core`.
 //!
-//! Lo stato condiviso (`Sessioni`) tiene una mappa id -> sessione attiva. Ogni
-//! sessione conserva la connessione SSH, il canale per inviare input alla shell
-//! e (a richiesta) un canale SFTP per il browser dei file.
+//! Stato condiviso (`Sessioni`): mappa id -> sessione attiva. Ogni sessione ha
+//! un canale d'ingresso (tasti/resize) e, se è SSH, la connessione (per SFTP e
+//! tunnel). L'output di QUALSIASI terminale viene rimandato alla UI come eventi
+//! `term-dati-<id>`; alla chiusura si emette `term-chiuso-<id>`.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use oxiterm_core::model::{Auth, Sessione, VoceFile};
-use oxiterm_core::ssh::{ComandoSsh, Connessione, SftpSession};
-use oxiterm_core::{sftp, storage};
+use oxiterm_core::ssh::{Connessione, SftpSession, StopTunnel};
+use oxiterm_core::term::{Canale, ComandoTerm};
+use oxiterm_core::{locale, seriale, sftp, telnet, storage};
+use serde::Serialize;
 use tauri::{Emitter, Manager, State};
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 
-/// Una sessione attualmente connessa.
-struct SessioneAttiva {
-    conn: Connessione,
-    input: mpsc::Sender<ComandoSsh>,
-    sftp: Option<SftpSession>,
+/// Un tunnel attivo con la sua descrizione e il modo per fermarlo.
+struct TunnelAttivo {
+    id: String,
+    descrizione: String,
+    stop: StopTunnel,
 }
 
-/// Stato condiviso: tutte le sessioni connesse, indicizzate per id.
+/// Vista di un tunnel inviata al frontend.
+#[derive(Serialize)]
+struct TunnelView {
+    id: String,
+    descrizione: String,
+}
+
+/// Una sessione attualmente aperta (di qualsiasi tipo).
+struct SessioneAttiva {
+    input: mpsc::Sender<ComandoTerm>,
+    /// Presente solo per le sessioni SSH (serve a SFTP e tunnel).
+    ssh: Option<Connessione>,
+    sftp: Option<SftpSession>,
+    tunnel: Vec<TunnelAttivo>,
+}
+
+/// Stato condiviso: tutte le sessioni aperte, indicizzate per id.
 #[derive(Default)]
 struct Sessioni(Mutex<HashMap<String, SessioneAttiva>>);
 
-/// Percorso del file con la rubrica delle sessioni salvate.
-fn file_sessioni(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+/// File con la rubrica delle sessioni salvate.
+fn file_sessioni(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
     Ok(dir.join("sessioni.json"))
 }
 
+/// File con le chiavi dei server conosciuti (known_hosts).
+fn file_known_hosts(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    Ok(dir.join("known_hosts.json"))
+}
+
+/// Avvia l'inoltro dell'output del canale verso la UI e registra la sessione.
+async fn registra(
+    app: &tauri::AppHandle,
+    stato: &State<'_, Sessioni>,
+    id: String,
+    canale: Canale,
+    ssh: Option<Connessione>,
+) {
+    let input = canale.input.clone();
+    let mut output = canale.output;
+
+    let app2 = app.clone();
+    let id2 = id.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(byte) = output.recv().await {
+            let _ = app2.emit(&format!("term-dati-{id2}"), byte);
+        }
+        let _ = app2.emit(&format!("term-chiuso-{id2}"), ());
+    });
+
+    stato.0.lock().await.insert(
+        id,
+        SessioneAttiva {
+            input,
+            ssh,
+            sftp: None,
+            tunnel: Vec::new(),
+        },
+    );
+}
+
 // ---------------------------------------------------------------------------
-// SSH: connessione e terminale
+// Apertura sessioni (SSH, locale, Telnet, seriale)
 // ---------------------------------------------------------------------------
 
-/// Apre una connessione SSH + shell e inizia a inoltrare l'output alla UI
-/// tramite l'evento `ssh-dati-<id>`. Alla chiusura emette `ssh-chiuso-<id>`.
+/// Apre una connessione SSH + shell.
 #[tauri::command]
 async fn ssh_connetti(
     app: tauri::AppHandle,
@@ -49,46 +105,78 @@ async fn ssh_connetti(
     colonne: u32,
     righe: u32,
 ) -> Result<(), String> {
-    let conn = Connessione::connetti(&host, porta, &utente, auth).await?;
+    let known = file_known_hosts(&app)?;
+    let conn = Connessione::connetti(&host, porta, &utente, auth, known).await?;
     let canale = conn.apri_shell(colonne, righe).await?;
-    let input = canale.input.clone();
-    let mut output = canale.output;
-
-    // Task che inoltra l'output del server alla UI come eventi Tauri.
-    let app2 = app.clone();
-    let id2 = id.clone();
-    tauri::async_runtime::spawn(async move {
-        while let Some(byte) = output.recv().await {
-            let _ = app2.emit(&format!("ssh-dati-{id2}"), byte);
-        }
-        let _ = app2.emit(&format!("ssh-chiuso-{id2}"), ());
-    });
-
-    stato.0.lock().await.insert(
-        id,
-        SessioneAttiva {
-            conn,
-            input,
-            sftp: None,
-        },
-    );
+    registra(&app, &stato, id, canale, Some(conn)).await;
     Ok(())
 }
 
-/// Invia all'host i byte digitati dall'utente.
+/// Apre un terminale locale (shell di sistema).
 #[tauri::command]
-async fn ssh_scrivi(stato: State<'_, Sessioni>, id: String, dati: String) -> Result<(), String> {
+async fn apri_locale(
+    app: tauri::AppHandle,
+    stato: State<'_, Sessioni>,
+    id: String,
+    shell: Option<String>,
+    colonne: u16,
+    righe: u16,
+) -> Result<(), String> {
+    let canale = locale::apri(shell, colonne, righe)?;
+    registra(&app, &stato, id, canale, None).await;
+    Ok(())
+}
+
+/// Apre una connessione Telnet.
+#[tauri::command]
+async fn apri_telnet(
+    app: tauri::AppHandle,
+    stato: State<'_, Sessioni>,
+    id: String,
+    host: String,
+    porta: u16,
+) -> Result<(), String> {
+    let canale = telnet::apri(&host, porta).await?;
+    registra(&app, &stato, id, canale, None).await;
+    Ok(())
+}
+
+/// Apre una console seriale.
+#[tauri::command]
+async fn apri_seriale(
+    app: tauri::AppHandle,
+    stato: State<'_, Sessioni>,
+    id: String,
+    porta: String,
+    baud: u32,
+) -> Result<(), String> {
+    let canale = seriale::apri(&porta, baud)?;
+    registra(&app, &stato, id, canale, None).await;
+    Ok(())
+}
+
+/// Elenca le porte seriali disponibili.
+#[tauri::command]
+fn porte_seriali() -> Vec<String> {
+    seriale::porte()
+}
+
+// ---------------------------------------------------------------------------
+// Terminale: input / resize / chiusura
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn term_scrivi(stato: State<'_, Sessioni>, id: String, dati: String) -> Result<(), String> {
     let mappa = stato.0.lock().await;
     let s = mappa.get(&id).ok_or("sessione inesistente")?;
     s.input
-        .send(ComandoSsh::Scrivi(dati.into_bytes()))
+        .send(ComandoTerm::Scrivi(dati.into_bytes()))
         .await
-        .map_err(|_| "shell chiusa".to_string())
+        .map_err(|_| "terminale chiuso".to_string())
 }
 
-/// Comunica al server le nuove dimensioni del terminale.
 #[tauri::command]
-async fn ssh_ridimensiona(
+async fn term_ridimensiona(
     stato: State<'_, Sessioni>,
     id: String,
     colonne: u32,
@@ -96,16 +184,92 @@ async fn ssh_ridimensiona(
 ) -> Result<(), String> {
     let mappa = stato.0.lock().await;
     if let Some(s) = mappa.get(&id) {
-        let _ = s.input.send(ComandoSsh::Ridimensiona(colonne, righe)).await;
+        let _ = s.input.send(ComandoTerm::Ridimensiona(colonne, righe)).await;
     }
     Ok(())
 }
 
-/// Chiude la sessione e libera le risorse.
 #[tauri::command]
-async fn ssh_disconnetti(stato: State<'_, Sessioni>, id: String) -> Result<(), String> {
+async fn term_chiudi(stato: State<'_, Sessioni>, id: String) -> Result<(), String> {
     if let Some(s) = stato.0.lock().await.remove(&id) {
-        let _ = s.input.send(ComandoSsh::Chiudi).await;
+        let _ = s.input.send(ComandoTerm::Chiudi).await;
+        for t in &s.tunnel {
+            t.stop.ferma().await;
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tunnel SSH (port forwarding)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn tunnel_locale(
+    stato: State<'_, Sessioni>,
+    id: String,
+    porta_locale: u16,
+    host_remoto: String,
+    porta_remota: u16,
+) -> Result<String, String> {
+    let mut mappa = stato.0.lock().await;
+    let s = mappa.get_mut(&id).ok_or("sessione inesistente")?;
+    let conn = s.ssh.as_ref().ok_or("i tunnel sono disponibili solo via SSH")?;
+    let stop = conn
+        .tunnel_locale(porta_locale, host_remoto.clone(), porta_remota)
+        .await?;
+    let tid = format!("L{porta_locale}");
+    s.tunnel.push(TunnelAttivo {
+        id: tid.clone(),
+        descrizione: format!("locale :{porta_locale} → {host_remoto}:{porta_remota}"),
+        stop,
+    });
+    Ok(tid)
+}
+
+#[tauri::command]
+async fn tunnel_socks(
+    stato: State<'_, Sessioni>,
+    id: String,
+    porta_locale: u16,
+) -> Result<String, String> {
+    let mut mappa = stato.0.lock().await;
+    let s = mappa.get_mut(&id).ok_or("sessione inesistente")?;
+    let conn = s.ssh.as_ref().ok_or("i tunnel sono disponibili solo via SSH")?;
+    let stop = conn.tunnel_socks(porta_locale).await?;
+    let tid = format!("D{porta_locale}");
+    s.tunnel.push(TunnelAttivo {
+        id: tid.clone(),
+        descrizione: format!("SOCKS5 dinamico :{porta_locale}"),
+        stop,
+    });
+    Ok(tid)
+}
+
+#[tauri::command]
+async fn lista_tunnel(stato: State<'_, Sessioni>, id: String) -> Result<Vec<TunnelView>, String> {
+    let mappa = stato.0.lock().await;
+    let s = mappa.get(&id).ok_or("sessione inesistente")?;
+    Ok(s.tunnel
+        .iter()
+        .map(|t| TunnelView {
+            id: t.id.clone(),
+            descrizione: t.descrizione.clone(),
+        })
+        .collect())
+}
+
+#[tauri::command]
+async fn ferma_tunnel(
+    stato: State<'_, Sessioni>,
+    id: String,
+    tunnel_id: String,
+) -> Result<(), String> {
+    let mut mappa = stato.0.lock().await;
+    let s = mappa.get_mut(&id).ok_or("sessione inesistente")?;
+    if let Some(pos) = s.tunnel.iter().position(|t| t.id == tunnel_id) {
+        let t = s.tunnel.remove(pos);
+        t.stop.ferma().await;
     }
     Ok(())
 }
@@ -115,19 +279,18 @@ async fn ssh_disconnetti(stato: State<'_, Sessioni>, id: String) -> Result<(), S
 // ---------------------------------------------------------------------------
 
 /// Assicura che la sessione abbia un canale SFTP aperto, poi esegue `f`.
-/// `f` riceve il riferimento al canale SFTP e restituisce un future.
 async fn con_sftp<T, F, Fut>(stato: &State<'_, Sessioni>, id: &str, f: F) -> Result<T, String>
 where
     F: FnOnce(SftpSession) -> Fut,
     Fut: std::future::Future<Output = (SftpSession, Result<T, String>)>,
 {
-    // Prende (o apre) il canale SFTP, lo estrae dalla mappa, lavora, lo rimette.
     let canale = {
         let mut mappa = stato.0.lock().await;
         let s = mappa.get_mut(id).ok_or("sessione inesistente")?;
+        let conn = s.ssh.as_ref().ok_or("SFTP disponibile solo via SSH")?;
         match s.sftp.take() {
             Some(c) => c,
-            None => s.conn.apri_sftp().await?,
+            None => conn.apri_sftp().await?,
         }
     };
     let (canale, esito) = f(canale).await;
@@ -137,7 +300,6 @@ where
     esito
 }
 
-/// Cartella iniziale (home) della sessione.
 #[tauri::command]
 async fn sftp_home(stato: State<'_, Sessioni>, id: String) -> Result<String, String> {
     con_sftp(&stato, &id, |c| async move {
@@ -147,7 +309,6 @@ async fn sftp_home(stato: State<'_, Sessioni>, id: String) -> Result<String, Str
     .await
 }
 
-/// Elenca una cartella remota.
 #[tauri::command]
 async fn sftp_lista(
     stato: State<'_, Sessioni>,
@@ -161,7 +322,6 @@ async fn sftp_lista(
     .await
 }
 
-/// Scarica un file remoto su disco locale.
 #[tauri::command]
 async fn sftp_scarica(
     stato: State<'_, Sessioni>,
@@ -176,7 +336,6 @@ async fn sftp_scarica(
     .await
 }
 
-/// Carica un file locale verso il server.
 #[tauri::command]
 async fn sftp_carica(
     stato: State<'_, Sessioni>,
@@ -191,7 +350,6 @@ async fn sftp_carica(
     .await
 }
 
-/// Crea una cartella remota.
 #[tauri::command]
 async fn sftp_crea_cartella(
     stato: State<'_, Sessioni>,
@@ -205,7 +363,6 @@ async fn sftp_crea_cartella(
     .await
 }
 
-/// Elimina un file o una cartella remota.
 #[tauri::command]
 async fn sftp_elimina(
     stato: State<'_, Sessioni>,
@@ -220,7 +377,6 @@ async fn sftp_elimina(
     .await
 }
 
-/// Rinomina/sposta un file remoto.
 #[tauri::command]
 async fn sftp_rinomina(
     stato: State<'_, Sessioni>,
@@ -239,13 +395,11 @@ async fn sftp_rinomina(
 // Session manager: rubrica delle sessioni salvate
 // ---------------------------------------------------------------------------
 
-/// Restituisce la rubrica delle sessioni salvate.
 #[tauri::command]
 fn lista_sessioni(app: tauri::AppHandle) -> Result<Vec<Sessione>, String> {
     Ok(storage::carica_sessioni(&file_sessioni(&app)?))
 }
 
-/// Inserisce o aggiorna una sessione nella rubrica (per id).
 #[tauri::command]
 fn salva_sessione(app: tauri::AppHandle, sessione: Sessione) -> Result<(), String> {
     let file = file_sessioni(&app)?;
@@ -257,7 +411,6 @@ fn salva_sessione(app: tauri::AppHandle, sessione: Sessione) -> Result<(), Strin
     storage::salva_sessioni(&file, &tutte)
 }
 
-/// Rimuove una sessione dalla rubrica.
 #[tauri::command]
 fn elimina_sessione(app: tauri::AppHandle, id: String) -> Result<(), String> {
     let file = file_sessioni(&app)?;
@@ -274,9 +427,17 @@ pub fn run() {
         .manage(Sessioni::default())
         .invoke_handler(tauri::generate_handler![
             ssh_connetti,
-            ssh_scrivi,
-            ssh_ridimensiona,
-            ssh_disconnetti,
+            apri_locale,
+            apri_telnet,
+            apri_seriale,
+            porte_seriali,
+            term_scrivi,
+            term_ridimensiona,
+            term_chiudi,
+            tunnel_locale,
+            tunnel_socks,
+            lista_tunnel,
+            ferma_tunnel,
             sftp_home,
             sftp_lista,
             sftp_scarica,

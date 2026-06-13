@@ -139,6 +139,19 @@ select {
   text-align: center;
   font-size: 12px;
 }
+.gruppo {
+  padding: 10px 12px 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--testo2);
+  font-weight: 700;
+}
+.strumento {
+  margin: 4px 8px;
+  align-self: center;
+  white-space: nowrap;
+}
 
 /* ---- Area principale ---- */
 .principale {
@@ -197,9 +210,36 @@ select {
   overflow: hidden;
   padding: 4px;
 }
+.term-area {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
 .term {
   width: 100%;
   height: 100%;
+}
+.cerca {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  background: var(--sfondo3);
+  border: 1px solid var(--bordo);
+  border-radius: 6px;
+  padding: 4px;
+}
+.cerca input {
+  width: 160px;
+}
+.cerca button {
+  padding: 2px 8px;
+}
+/* Quando il pannello SFTP non c'è (sessioni non-SSH), il terminale prende tutto */
+.pannello-tab.solo-term {
+  grid-template-columns: 1fr;
 }
 
 /* ---- Pannello SFTP ---- */

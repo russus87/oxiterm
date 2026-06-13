@@ -1,34 +1,37 @@
 <script>
-  // Componente principale: sidebar col session manager + area a schede con
-  // terminale SSH e pannello SFTP per ogni sessione aperta.
+  // Componente principale: sidebar col session manager (a gruppi) + area a schede
+  // con terminale e, per le sessioni SSH, pannello SFTP. Gestisce impostazioni,
+  // tunnel e broadcast dell'input.
   import { onMount } from "svelte";
-  import { open as apriFile } from "@tauri-apps/plugin-dialog";
   import * as api from "./lib/api.js";
+  import { impostazioni } from "./lib/impostazioni.svelte.js";
   import Terminale from "./components/Terminale.svelte";
   import Sftp from "./components/Sftp.svelte";
+  import FormConnessione from "./components/FormConnessione.svelte";
+  import Impostazioni from "./components/Impostazioni.svelte";
+  import Tunnel from "./components/Tunnel.svelte";
 
   let sessioni = $state([]); // rubrica salvata
   let tabs = $state([]); // sessioni aperte
   let tabAttivoId = $state(null);
 
-  // Stato del form "nuova connessione".
   let mostraForm = $state(false);
-  let form = $state(vuotoForm());
+  let formIniziale = $state(null);
+  let mostraImpostazioni = $state(false);
+  let mostraTunnel = $state(false);
 
-  function vuotoForm() {
-    return {
-      idSalvata: null,
-      nome: "",
-      host: "",
-      porta: 22,
-      utente: "",
-      metodo: "password", // password | chiave
-      password: "",
-      percorsoChiave: "",
-      passphrase: "",
-      salva: true,
-    };
-  }
+  const tabAttivo = $derived(tabs.find((t) => t.id === tabAttivoId) ?? null);
+
+  // Raggruppa le sessioni salvate per "gruppo".
+  const gruppi = $derived.by(() => {
+    const m = new Map();
+    for (const s of sessioni) {
+      const g = s.gruppo || "Senza gruppo";
+      if (!m.has(g)) m.set(g, []);
+      m.get(g).push(s);
+    }
+    return [...m.entries()];
+  });
 
   onMount(caricaSessioni);
 
@@ -41,30 +44,26 @@
   }
 
   function nuovaConnessione() {
-    form = vuotoForm();
+    formIniziale = null;
     mostraForm = true;
   }
 
-  // Apre il form precompilato da una sessione salvata (manca solo il segreto).
   function apriSalvata(s) {
-    form = {
+    formIniziale = {
       idSalvata: s.id,
+      tipo: s.tipo || "ssh",
       nome: s.nome,
-      host: s.host,
-      porta: s.porta,
-      utente: s.utente,
+      host: s.host || "",
+      porta: s.porta || 22,
+      utente: s.utente || "",
       metodo: s.chiave ? "chiave" : "password",
-      password: "",
       percorsoChiave: s.chiave || "",
-      passphrase: "",
+      porta_seriale: s.porta_seriale || "",
+      baud: s.baud || 115200,
+      gruppo: s.gruppo || "",
       salva: false,
     };
     mostraForm = true;
-  }
-
-  async function scegliChiave() {
-    const f = await apriFile({ multiple: false });
-    if (f) form.percorsoChiave = f;
   }
 
   async function eliminaSalvata(s) {
@@ -73,7 +72,8 @@
     caricaSessioni();
   }
 
-  async function connetti() {
+  // Apre una nuova scheda a partire dal form di connessione.
+  async function connetti(form) {
     const auth =
       form.metodo === "password"
         ? { tipo: "password", password: form.password }
@@ -83,26 +83,42 @@
             passphrase: form.passphrase || null,
           };
 
-    const nome = form.nome || `${form.utente}@${form.host}`;
+    const nome =
+      form.nome ||
+      (form.tipo === "ssh"
+        ? `${form.utente}@${form.host}`
+        : form.tipo === "telnet"
+          ? `telnet ${form.host}`
+          : form.tipo === "seriale"
+            ? form.porta_seriale
+            : "locale");
+
     const tab = {
       id: crypto.randomUUID(),
+      tipo: form.tipo,
       nome,
       host: form.host,
       porta: Number(form.porta),
       utente: form.utente,
       auth,
+      shell: form.shell,
+      porta_seriale: form.porta_seriale,
+      baud: Number(form.baud),
       connesso: false,
     };
 
-    // Salva nella rubrica se richiesto (senza segreti).
     if (form.salva) {
       await api.salvaSessione({
         id: form.idSalvata || crypto.randomUUID(),
         nome,
+        tipo: form.tipo,
         host: form.host,
         porta: Number(form.porta),
         utente: form.utente,
         chiave: form.metodo === "chiave" ? form.percorsoChiave : null,
+        gruppo: form.gruppo || null,
+        porta_seriale: form.porta_seriale || null,
+        baud: form.tipo === "seriale" ? Number(form.baud) : null,
       });
       caricaSessioni();
     }
@@ -113,36 +129,62 @@
   }
 
   async function chiudiTab(id) {
-    await api.sshDisconnetti(id).catch(() => {});
+    await api.termChiudi(id).catch(() => {});
     const i = tabs.findIndex((t) => t.id === id);
     tabs = tabs.filter((t) => t.id !== id);
     if (tabAttivoId === id) {
       tabAttivoId = tabs[Math.max(0, i - 1)]?.id ?? null;
     }
   }
+
+  // Inoltra l'input: a una sola scheda o a tutte (broadcast).
+  function invia(id, dati) {
+    if (impostazioni.broadcast) {
+      for (const t of tabs) if (t.connesso) api.termScrivi(t.id, dati);
+    } else {
+      api.termScrivi(id, dati);
+    }
+  }
+
+  function icona(tipo) {
+    return { ssh: "🔐", locale: "💻", telnet: "🌐", seriale: "🔌" }[tipo] || "🖥";
+  }
 </script>
 
 <div class="app">
-  <!-- Sidebar: session manager -->
+  <!-- Sidebar: session manager a gruppi -->
   <aside class="sidebar">
     <h1><span class="pallino"></span> Oxiterm</h1>
     <div class="azioni">
       <button class="primario" onclick={nuovaConnessione}>+ Nuova sessione</button>
     </div>
     <div class="lista-sessioni">
-      {#each sessioni as s (s.id)}
-        <div class="voce-sessione" onclick={() => apriSalvata(s)}>
-          <span class="nome">{s.nome}</span>
-          <span class="dett">{s.utente}@{s.host}:{s.porta}</span>
-          <button
-            class="x pericolo"
-            title="Elimina"
-            onclick={(e) => (e.stopPropagation(), eliminaSalvata(s))}>elimina</button
-          >
-        </div>
+      {#each gruppi as [nomeGruppo, lista] (nomeGruppo)}
+        <div class="gruppo">{nomeGruppo}</div>
+        {#each lista as s (s.id)}
+          <div class="voce-sessione" onclick={() => apriSalvata(s)}>
+            <span class="nome" style={s.colore ? `color:${s.colore}` : ""}>
+              {icona(s.tipo)} {s.nome}
+            </span>
+            <span class="dett">
+              {#if s.tipo === "ssh"}{s.utente}@{s.host}:{s.porta}
+              {:else if s.tipo === "telnet"}telnet {s.host}:{s.porta}
+              {:else if s.tipo === "seriale"}{s.porta_seriale} @ {s.baud}
+              {:else}terminale locale{/if}
+            </span>
+            <button
+              class="x pericolo"
+              title="Elimina"
+              onclick={(e) => (e.stopPropagation(), eliminaSalvata(s))}>elimina</button
+            >
+          </div>
+        {/each}
       {:else}
         <div class="vuoto">Nessuna sessione salvata.<br />Creane una con "+ Nuova sessione".</div>
       {/each}
+    </div>
+    <div class="azioni">
+      <button onclick={() => (mostraImpostazioni = true)}>⚙ Impostazioni</button>
     </div>
   </aside>
 
@@ -154,10 +196,19 @@
           class="tab {t.id === tabAttivoId ? 'attivo' : ''}"
           onclick={() => (tabAttivoId = t.id)}
         >
-          <span>{t.nome}</span>
+          <span>{icona(t.tipo)} {t.nome}</span>
           <button class="x" onclick={(e) => (e.stopPropagation(), chiudiTab(t.id))}>✕</button>
         </div>
       {/each}
+      <div style="flex:1"></div>
+      {#if impostazioni.broadcast}
+        <div class="tab" style="color:#ffd43b" title="Broadcast attivo">📢 broadcast</div>
+      {/if}
+      {#if tabAttivo?.tipo === "ssh"}
+        <button class="strumento" title="Tunnel SSH" onclick={() => (mostraTunnel = true)}>
+          🚇 Tunnel
+        </button>
+      {/if}
     </div>
 
     <div class="contenuto">
@@ -169,80 +220,41 @@
         </div>
       {/if}
       {#each tabs as t (t.id)}
-        <div class="pannello-tab {t.id === tabAttivoId ? '' : 'nascosto'}">
+        <div
+          class="pannello-tab {t.id === tabAttivoId ? '' : 'nascosto'} {t.tipo === 'ssh'
+            ? ''
+            : 'solo-term'}"
+        >
           <div class="term-wrap">
             <Terminale
               tab={t}
               attivo={t.id === tabAttivoId}
+              {invia}
               onConnesso={() => (t.connesso = true)}
               onChiuso={() => (t.connesso = false)}
             />
           </div>
-          <Sftp id={t.id} pronto={t.connesso} />
+          {#if t.tipo === "ssh"}
+            <Sftp id={t.id} pronto={t.connesso} />
+          {/if}
         </div>
       {/each}
     </div>
   </main>
 </div>
 
-<!-- Form nuova connessione -->
 {#if mostraForm}
-  <div class="overlay" onclick={() => (mostraForm = false)}>
-    <div class="modale" onclick={(e) => e.stopPropagation()}>
-      <h2>Nuova connessione SSH</h2>
-      <div class="campo">
-        <label>Nome (facoltativo)</label>
-        <input bind:value={form.nome} placeholder="Server di produzione" />
-      </div>
-      <div class="riga">
-        <div class="campo" style="flex:3">
-          <label>Host</label>
-          <input bind:value={form.host} placeholder="192.168.1.10 o esempio.com" />
-        </div>
-        <div class="campo" style="flex:1">
-          <label>Porta</label>
-          <input type="number" bind:value={form.porta} />
-        </div>
-      </div>
-      <div class="campo">
-        <label>Utente</label>
-        <input bind:value={form.utente} placeholder="root" />
-      </div>
-      <div class="campo">
-        <label>Autenticazione</label>
-        <select bind:value={form.metodo}>
-          <option value="password">Password</option>
-          <option value="chiave">Chiave privata</option>
-        </select>
-      </div>
-      {#if form.metodo === "password"}
-        <div class="campo">
-          <label>Password</label>
-          <input type="password" bind:value={form.password} />
-        </div>
-      {:else}
-        <div class="campo">
-          <label>File chiave privata</label>
-          <div class="riga">
-            <input bind:value={form.percorsoChiave} placeholder="~/.ssh/id_ed25519" />
-            <button onclick={scegliChiave}>Sfoglia</button>
-          </div>
-        </div>
-        <div class="campo">
-          <label>Passphrase (se presente)</label>
-          <input type="password" bind:value={form.passphrase} />
-        </div>
-      {/if}
-      <div class="campo" style="display:flex;align-items:center;gap:8px">
-        <input type="checkbox" bind:checked={form.salva} style="width:auto" id="salva" />
-        <label for="salva" style="margin:0">Salva nella rubrica</label>
-      </div>
-      <div class="pulsanti">
-        <button onclick={() => (mostraForm = false)}>Annulla</button>
-        <button class="primario" onclick={connetti} disabled={!form.host || !form.utente}>
-          Connetti
-        </button>
-      </div>
-    </div>
-  </div>
+  <FormConnessione
+    iniziale={formIniziale}
+    onConnetti={connetti}
+    onChiudi={() => (mostraForm = false)}
+  />
+{/if}
+
+{#if mostraImpostazioni}
+  <Impostazioni onChiudi={() => (mostraImpostazioni = false)} />
+{/if}
+
+{#if mostraTunnel && tabAttivo}
+  <Tunnel id={tabAttivo.id} onChiudi={() => (mostraTunnel = false)} />
 {/if}
