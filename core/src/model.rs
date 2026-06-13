@@ -24,6 +24,17 @@ pub enum TipoSessione {
     Locale,
     Telnet,
     Seriale,
+    Vnc,
+}
+
+/// Configurazione di un host intermedio (bastion / ProxyJump) per arrivare al
+/// server vero attraverso un'altra macchina SSH.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct JumpConfig {
+    pub host: String,
+    pub porta: u16,
+    pub utente: String,
+    pub auth: Auth,
 }
 
 impl Default for TipoSessione {
@@ -60,6 +71,15 @@ pub struct Sessione {
     pub porta_seriale: Option<String>,
     #[serde(default)]
     pub baud: Option<u32>,
+    /// Host intermedio (jump/bastion) opzionale, senza segreti.
+    #[serde(default)]
+    pub jump_host: Option<String>,
+    #[serde(default)]
+    pub jump_porta: Option<u16>,
+    #[serde(default)]
+    pub jump_utente: Option<String>,
+    #[serde(default)]
+    pub jump_chiave: Option<String>,
 }
 
 fn porta_ssh() -> u16 {

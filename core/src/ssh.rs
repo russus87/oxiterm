@@ -16,7 +16,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
-use crate::model::Auth;
+use crate::model::{Auth, JumpConfig};
 use crate::term::{Canale, ComandoTerm};
 
 // Ri-esporta il tipo SFTP così il livello desktop non dipende da russh_sftp.
@@ -137,10 +137,13 @@ fn salva_conosciuti(file: &PathBuf, mappa: &HashMap<String, String>) {
 pub struct Connessione {
     handle: Arc<tokio::sync::Mutex<Handle<Gestore>>>,
     inoltri: Inoltri,
+    /// Eventuale connessione al bastion, tenuta viva finché vive questa.
+    _bastione: Option<Box<Connessione>>,
 }
 
 impl Connessione {
-    /// Apre la connessione TCP, verifica la chiave del server e autentica.
+    /// Apre la connessione SSH (direttamente o attraverso un jump host),
+    /// verifica la chiave del server e autentica.
     pub async fn connetti(
         host: &str,
         porta: u16,
@@ -148,6 +151,7 @@ impl Connessione {
         auth: Auth,
         known_hosts: PathBuf,
         modo: ModoFiducia,
+        jump: Option<JumpConfig>,
     ) -> Result<Self, String> {
         let config = Arc::new(client::Config {
             keepalive_interval: Some(std::time::Duration::from_secs(15)),
@@ -156,23 +160,53 @@ impl Connessione {
         let esito = Arc::new(Mutex::new(None));
         let inoltri: Inoltri = Arc::new(Mutex::new(HashMap::new()));
         let gestore = Gestore {
-            conosciuti: known_hosts,
+            conosciuti: known_hosts.clone(),
             etichetta: format!("{host}:{porta}"),
             modo,
             esito: esito.clone(),
             inoltri: inoltri.clone(),
         };
 
-        let mut handle = match client::connect(config, (host, porta), gestore).await {
-            Ok(h) => h,
-            Err(e) => {
-                // Se il problema è la chiave del server, segnaliamolo in modo
-                // riconoscibile dal frontend (per chiedere conferma).
-                if let Some((stato, impronta)) = esito.lock().unwrap().clone() {
-                    return Err(format!("HOSTKEY:{stato}:{impronta}"));
-                }
-                return Err(format!("connessione fallita: {e}"));
+        // Converte un errore di connessione tenendo conto della chiave del server.
+        let err_connessione = |e: russh::Error, esito: &Arc<Mutex<Option<(String, String)>>>| {
+            if let Some((stato, impronta)) = esito.lock().unwrap().clone() {
+                format!("HOSTKEY:{stato}:{impronta}")
+            } else {
+                format!("connessione fallita: {e}")
             }
+        };
+
+        // Con jump host: ci colleghiamo prima al bastion, apriamo un canale
+        // verso il bersaglio e ci facciamo l'handshake SSH sopra quel canale.
+        let mut bastione_vivo: Option<Box<Connessione>> = None;
+        let mut handle = if let Some(j) = jump {
+            let bastione = Box::pin(Connessione::connetti(
+                &j.host,
+                j.porta,
+                &j.utente,
+                j.auth,
+                known_hosts,
+                modo,
+                None,
+            ))
+            .await?;
+            let canale = bastione
+                .handle
+                .lock()
+                .await
+                .channel_open_direct_tcpip(host.to_string(), porta as u32, "127.0.0.1".to_string(), 0)
+                .await
+                .map_err(|e| format!("il jump host non raggiunge {host}:{porta}: {e}"))?;
+            let stream = canale.into_stream();
+            let h = client::connect_stream(config, stream, gestore)
+                .await
+                .map_err(|e| err_connessione(e, &esito))?;
+            bastione_vivo = Some(Box::new(bastione));
+            h
+        } else {
+            client::connect(config, (host, porta), gestore)
+                .await
+                .map_err(|e| err_connessione(e, &esito))?
         };
 
         let ok = match auth {
@@ -202,6 +236,7 @@ impl Connessione {
         Ok(Connessione {
             handle: Arc::new(tokio::sync::Mutex::new(handle)),
             inoltri,
+            _bastione: bastione_vivo,
         })
     }
 

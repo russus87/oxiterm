@@ -6,13 +6,17 @@
 //! tunnel). L'output di QUALSIASI terminale viene rimandato alla UI come eventi
 //! `term-dati-<id>`; alla chiusura si emette `term-chiuso-<id>`.
 
+mod git_sync;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use oxiterm_core::model::{Auth, Sessione, Snippet, VoceFile};
+use oxiterm_core::model::{Auth, JumpConfig, Sessione, Snippet, VoceFile};
 use oxiterm_core::ssh::{Connessione, ModoFiducia, SftpSession, StopTunnel};
 use oxiterm_core::term::{Canale, ComandoTerm};
+use oxiterm_core::vnc::{self, ComandoVnc};
 use oxiterm_core::{locale, seriale, sftp, telnet, storage};
+use base64::Engine;
 use serde::Serialize;
 use tauri::{Emitter, Manager, State};
 use tokio::sync::mpsc;
@@ -32,6 +36,9 @@ struct TunnelView {
     descrizione: String,
 }
 
+/// File di log della sessione (se attivo). Condiviso col task di inoltro output.
+type LogSessione = std::sync::Arc<std::sync::Mutex<Option<std::fs::File>>>;
+
 /// Una sessione attualmente aperta (di qualsiasi tipo).
 struct SessioneAttiva {
     input: mpsc::Sender<ComandoTerm>,
@@ -39,11 +46,35 @@ struct SessioneAttiva {
     ssh: Option<Connessione>,
     sftp: Option<SftpSession>,
     tunnel: Vec<TunnelAttivo>,
+    log: LogSessione,
+}
+
+/// Avanzamento di un trasferimento SFTP, inviato alla UI.
+#[derive(Clone, Serialize)]
+struct ProgressoSftp {
+    id: String,
+    fatti: u64,
+    totale: u64,
 }
 
 /// Stato condiviso: tutte le sessioni aperte, indicizzate per id.
 #[derive(Default)]
 struct Sessioni(Mutex<HashMap<String, SessioneAttiva>>);
+
+/// Stato delle sessioni VNC aperte (id -> canale d'ingresso).
+#[derive(Default)]
+struct StatoVnc(Mutex<HashMap<String, mpsc::Sender<ComandoVnc>>>);
+
+/// Un rettangolo di schermo VNC inviato alla UI (rgba in base64).
+#[derive(Clone, Serialize)]
+struct FrameVncView {
+    x: u16,
+    y: u16,
+    w: u16,
+    h: u16,
+    dati: String,
+    resize: Option<(u16, u16)>,
+}
 
 /// File con la rubrica delle sessioni salvate.
 fn file_sessioni(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -73,11 +104,20 @@ async fn registra(
 ) {
     let input = canale.input.clone();
     let mut output = canale.output;
+    let log: LogSessione = std::sync::Arc::new(std::sync::Mutex::new(None));
 
     let app2 = app.clone();
     let id2 = id.clone();
+    let log2 = log.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(byte) = output.recv().await {
+            // Se il log è attivo, scrivi l'output anche su file.
+            if let Ok(mut g) = log2.lock() {
+                if let Some(f) = g.as_mut() {
+                    use std::io::Write;
+                    let _ = f.write_all(&byte);
+                }
+            }
             let _ = app2.emit(&format!("term-dati-{id2}"), byte);
         }
         let _ = app2.emit(&format!("term-chiuso-{id2}"), ());
@@ -90,6 +130,7 @@ async fn registra(
             ssh,
             sftp: None,
             tunnel: Vec::new(),
+            log,
         },
     );
 }
@@ -111,6 +152,7 @@ async fn ssh_connetti(
     colonne: u32,
     righe: u32,
     modo: Option<String>,
+    jump: Option<JumpConfig>,
 ) -> Result<(), String> {
     let known = file_known_hosts(&app)?;
     let modo = match modo.as_deref() {
@@ -118,7 +160,7 @@ async fn ssh_connetti(
         Some("sostituisci") => ModoFiducia::Sostituisci,
         _ => ModoFiducia::Normale,
     };
-    let conn = Connessione::connetti(&host, porta, &utente, auth, known, modo).await?;
+    let conn = Connessione::connetti(&host, porta, &utente, auth, known, modo, jump).await?;
     let canale = conn.apri_shell(colonne, righe).await?;
     registra(&app, &stato, id, canale, Some(conn)).await;
     Ok(())
@@ -174,6 +216,83 @@ fn porte_seriali() -> Vec<String> {
 }
 
 // ---------------------------------------------------------------------------
+// VNC (sperimentale)
+// ---------------------------------------------------------------------------
+
+/// Apre una sessione VNC e inoltra i frame alla UI (`vnc-frame-<id>`).
+#[tauri::command]
+async fn apri_vnc(
+    app: tauri::AppHandle,
+    stato: State<'_, StatoVnc>,
+    id: String,
+    host: String,
+    porta: u16,
+    password: Option<String>,
+) -> Result<(), String> {
+    let canale = vnc::apri(&host, porta, password)?;
+    let input = canale.input.clone();
+    let mut frame = canale.frame;
+
+    let app2 = app.clone();
+    let id2 = id.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(f) = frame.recv().await {
+            let dati = base64::engine::general_purpose::STANDARD.encode(&f.rgba);
+            let _ = app2.emit(
+                &format!("vnc-frame-{id2}"),
+                FrameVncView {
+                    x: f.x,
+                    y: f.y,
+                    w: f.w,
+                    h: f.h,
+                    dati,
+                    resize: f.resize,
+                },
+            );
+        }
+        let _ = app2.emit(&format!("vnc-chiuso-{id2}"), ());
+    });
+
+    stato.0.lock().await.insert(id, input);
+    Ok(())
+}
+
+#[tauri::command]
+async fn vnc_mouse(
+    stato: State<'_, StatoVnc>,
+    id: String,
+    x: u16,
+    y: u16,
+    bottoni: u8,
+) -> Result<(), String> {
+    if let Some(tx) = stato.0.lock().await.get(&id) {
+        let _ = tx.send(ComandoVnc::Mouse { x, y, bottoni }).await;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn vnc_tasto(
+    stato: State<'_, StatoVnc>,
+    id: String,
+    giu: bool,
+    key: u32,
+) -> Result<(), String> {
+    if let Some(tx) = stato.0.lock().await.get(&id) {
+        let _ = tx.send(ComandoVnc::Tasto { giu, key }).await;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn vnc_chiudi(stato: State<'_, StatoVnc>, id: String) -> Result<(), String> {
+    if let Some(tx) = stato.0.lock().await.remove(&id) {
+        let _ = tx.send(ComandoVnc::Chiudi).await;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Terminale: input / resize / chiusura
 // ---------------------------------------------------------------------------
 
@@ -208,6 +327,34 @@ async fn term_chiudi(stato: State<'_, Sessioni>, id: String) -> Result<(), Strin
         for t in &s.tunnel {
             t.stop.ferma().await;
         }
+    }
+    Ok(())
+}
+
+/// Avvia la registrazione su file dell'output della sessione.
+#[tauri::command]
+async fn term_log_avvia(
+    stato: State<'_, Sessioni>,
+    id: String,
+    percorso: String,
+) -> Result<(), String> {
+    let mappa = stato.0.lock().await;
+    let s = mappa.get(&id).ok_or("sessione inesistente")?;
+    let f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&percorso)
+        .map_err(|e| e.to_string())?;
+    *s.log.lock().unwrap() = Some(f);
+    Ok(())
+}
+
+/// Ferma la registrazione su file.
+#[tauri::command]
+async fn term_log_ferma(stato: State<'_, Sessioni>, id: String) -> Result<(), String> {
+    let mappa = stato.0.lock().await;
+    if let Some(s) = mappa.get(&id) {
+        *s.log.lock().unwrap() = None;
     }
     Ok(())
 }
@@ -426,6 +573,60 @@ async fn sftp_rinomina(
     .await
 }
 
+/// Carica un file mostrando l'avanzamento (eventi `sftp-progresso`).
+#[tauri::command]
+async fn sftp_carica_coda(
+    app: tauri::AppHandle,
+    stato: State<'_, Sessioni>,
+    id: String,
+    trasferimento: String,
+    locale: String,
+    remoto: String,
+) -> Result<(), String> {
+    con_sftp(&stato, &id, move |c| async move {
+        let r = sftp::carica_progresso(&c, &locale, &remoto, |fatti, totale| {
+            let _ = app.emit(
+                "sftp-progresso",
+                ProgressoSftp {
+                    id: trasferimento.clone(),
+                    fatti,
+                    totale,
+                },
+            );
+        })
+        .await;
+        (c, r)
+    })
+    .await
+}
+
+/// Scarica un file mostrando l'avanzamento (eventi `sftp-progresso`).
+#[tauri::command]
+async fn sftp_scarica_coda(
+    app: tauri::AppHandle,
+    stato: State<'_, Sessioni>,
+    id: String,
+    trasferimento: String,
+    remoto: String,
+    locale: String,
+) -> Result<(), String> {
+    con_sftp(&stato, &id, move |c| async move {
+        let r = sftp::scarica_progresso(&c, &remoto, &locale, |fatti, totale| {
+            let _ = app.emit(
+                "sftp-progresso",
+                ProgressoSftp {
+                    id: trasferimento.clone(),
+                    fatti,
+                    totale,
+                },
+            );
+        })
+        .await;
+        (c, r)
+    })
+    .await
+}
+
 /// Scarica un file remoto in una cartella temporanea, restituisce il percorso
 /// locale (che il frontend aprirà con l'editor di sistema) e avvia un piccolo
 /// task che lo ricarica sul server ogni volta che il file locale cambia.
@@ -550,6 +751,37 @@ fn importa_rubrica(app: tauri::AppHandle, percorso: String) -> Result<usize, Str
 }
 
 // ---------------------------------------------------------------------------
+// Sincronizzazione cloud (Git)
+// ---------------------------------------------------------------------------
+
+/// Cartella di configurazione (il repository di sincronizzazione).
+fn cartella_config(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+#[tauri::command]
+fn sync_remote(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    Ok(git_sync::remote_url(&cartella_config(&app)?))
+}
+
+#[tauri::command]
+fn sync_imposta_remote(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    git_sync::imposta_remote(&cartella_config(&app)?, &url)
+}
+
+#[tauri::command]
+fn sync_push(app: tauri::AppHandle) -> Result<(), String> {
+    git_sync::push(&cartella_config(&app)?)
+}
+
+#[tauri::command]
+fn sync_pull(app: tauri::AppHandle) -> Result<(), String> {
+    git_sync::pull(&cartella_config(&app)?)
+}
+
+// ---------------------------------------------------------------------------
 // Snippet / macro
 // ---------------------------------------------------------------------------
 
@@ -584,15 +816,22 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Sessioni::default())
+        .manage(StatoVnc::default())
         .invoke_handler(tauri::generate_handler![
             ssh_connetti,
             apri_locale,
             apri_telnet,
             apri_seriale,
             porte_seriali,
+            apri_vnc,
+            vnc_mouse,
+            vnc_tasto,
+            vnc_chiudi,
             term_scrivi,
             term_ridimensiona,
             term_chiudi,
+            term_log_avvia,
+            term_log_ferma,
             tunnel_locale,
             tunnel_socks,
             tunnel_remoto,
@@ -605,6 +844,8 @@ pub fn run() {
             sftp_crea_cartella,
             sftp_elimina,
             sftp_rinomina,
+            sftp_carica_coda,
+            sftp_scarica_coda,
             sftp_apri_editor,
             lista_sessioni,
             salva_sessione,
@@ -614,6 +855,10 @@ pub fn run() {
             lista_snippet,
             salva_snippet,
             elimina_snippet,
+            sync_remote,
+            sync_imposta_remote,
+            sync_push,
+            sync_pull,
         ])
         .run(tauri::generate_context!())
         .expect("errore durante l'avvio di Oxiterm");

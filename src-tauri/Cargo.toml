@@ -27,3 +27,7 @@ tauri-plugin-opener = "2"
 oxiterm-core = { path = "../core" }
 # Per i canali e i Mutex asincroni usati nello stato condiviso.
 tokio = { version = "1", features = ["sync", "time"] }
+# Sincronizzazione cloud della rubrica via Git (binding di libgit2).
+git2 = "0.20"
+# Per inviare i frame VNC alla UI come stringhe compatte.
+base64 = "0.22"

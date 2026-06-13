@@ -16,3 +16,4 @@ pub mod ssh;
 pub mod storage;
 pub mod telnet;
 pub mod term;
+pub mod vnc;

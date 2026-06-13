@@ -44,6 +44,56 @@ pub async fn carica(sftp: &SftpSession, locale: &str, remoto: &str) -> Result<()
     f.flush().await.map_err(|e| e.to_string())
 }
 
+/// Carica un file locale segnalando l'avanzamento (byte scritti, totale).
+pub async fn carica_progresso<F: Fn(u64, u64)>(
+    sftp: &SftpSession,
+    locale: &str,
+    remoto: &str,
+    prog: F,
+) -> Result<(), String> {
+    let dati = tokio::fs::read(locale).await.map_err(|e| e.to_string())?;
+    let totale = dati.len() as u64;
+    let mut f = sftp.create(remoto).await.map_err(|e| e.to_string())?;
+    let mut scritti = 0u64;
+    prog(0, totale);
+    for chunk in dati.chunks(32 * 1024) {
+        f.write_all(chunk).await.map_err(|e| e.to_string())?;
+        scritti += chunk.len() as u64;
+        prog(scritti, totale);
+    }
+    f.flush().await.map_err(|e| e.to_string())
+}
+
+/// Scarica un file remoto segnalando l'avanzamento (byte letti, totale).
+pub async fn scarica_progresso<F: Fn(u64, u64)>(
+    sftp: &SftpSession,
+    remoto: &str,
+    locale: &str,
+    prog: F,
+) -> Result<(), String> {
+    let totale = sftp
+        .metadata(remoto)
+        .await
+        .ok()
+        .and_then(|m| m.size)
+        .unwrap_or(0);
+    let mut f = sftp.open(remoto).await.map_err(|e| e.to_string())?;
+    let mut out = tokio::fs::File::create(locale).await.map_err(|e| e.to_string())?;
+    let mut buf = vec![0u8; 32 * 1024];
+    let mut letti = 0u64;
+    prog(0, totale);
+    loop {
+        let n = f.read(&mut buf).await.map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        out.write_all(&buf[..n]).await.map_err(|e| e.to_string())?;
+        letti += n as u64;
+        prog(letti, totale.max(letti));
+    }
+    out.flush().await.map_err(|e| e.to_string())
+}
+
 /// Crea una cartella remota.
 pub async fn crea_cartella(sftp: &SftpSession, percorso: &str) -> Result<(), String> {
     sftp.create_dir(percorso).await.map_err(|e| e.to_string())

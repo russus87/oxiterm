@@ -10,7 +10,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 # Runtime async: SSH/SFTP sono interamente asincroni.
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "fs"] }
 # Client SSH puro Rust (niente OpenSSL di sistema): ottimo per pacchettizzare ovunque.
 russh = "0.54"
 # Sottosistema SFTP sopra a russh.
@@ -19,6 +19,8 @@ russh-sftp = "2"
 portable-pty = "0.9"
 # Porte seriali (COM / tty).
 serialport = "4"
+# Client VNC (RFB). Sperimentale.
+vnc = "0.4"
 
 [dev-dependencies]
 tempfile = "3"
