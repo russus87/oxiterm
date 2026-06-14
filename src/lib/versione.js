@@ -1,7 +1,15 @@
 // Versione dell'app e changelog, mostrati nel pannello Info.
-export const VERSIONE = "0.6.1";
+export const VERSIONE = "0.7.0";
 
 export const changelog = [
+  {
+    versione: "0.7.0",
+    note: [
+      "Strumenti di rete: ping, traceroute, controllo porta, Wake-on-LAN",
+      "Monitor server (uptime/memoria/disco/processi) con aggiornamento live",
+      "VNC: cursore remoto disegnato correttamente",
+    ],
+  },
   {
     versione: "0.6.1",
     note: [

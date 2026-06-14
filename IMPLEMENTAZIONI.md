@@ -114,6 +114,20 @@ Legenda: ✅ fatto · 🚧 in corso · ⏳ pianificato · ❌ fuori scope
 10. ✅ **Vault cifrato**: `src-tauri/vault.rs` (Argon2 + AES-256-GCM), sblocco con master password,
     salvataggio/lettura password per sessione
 
+## Fase 11 — 0.6.x / 0.7.0
+
+- ✅ 0.6.0: import ~/.ssh/config, quick connect, comandi avvio, anteprima SFTP, tema app,
+  notifiche, riordino+ripristino schede, segnalibri sync, **auto-update**
+- ✅ 0.6.1: repo sorgente pubblico → auto-update dalle release GitHub (rimosso repo dist)
+- ✅ 0.7.0: **strumenti di rete** (ping/traceroute/porta/Wake-on-LAN), **monitor server** live,
+  **cursore VNC** remoto
+- ⏳ **RDP** rinviato alla 0.8.0 (dedicata, da testare contro Windows reale)
+
+## Distribuzione
+
+- Release pubbliche su GitHub (Actions gratuite). Auto-update (AppImage Linux) attivo.
+- Per Arch: `.pkg.tar.zst` nelle release. AUR escluso su scelta dell'utente.
+
 ## Non implementati — valutazione onesta
 
 - ❌ **Client RDP / VNC**: sono di fatto applicazioni a sé (rendering del desktop remoto frame per
