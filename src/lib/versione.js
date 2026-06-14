@@ -1,7 +1,15 @@
 // Versione dell'app e changelog, mostrati nel pannello Info.
-export const VERSIONE = "0.7.0";
+export const VERSIONE = "0.7.1";
 
 export const changelog = [
+  {
+    versione: "0.7.1",
+    note: [
+      "Fix: la connessione si apre subito (non più bloccata dal salvataggio)",
+      "Gli errori di connessione/salvataggio ora sono sempre mostrati",
+      "Messaggio chiaro quando mancano host/utente nel form",
+    ],
+  },
   {
     versione: "0.7.0",
     note: [

@@ -265,6 +265,15 @@
       </div>
     {/if}
 
+    {#if !valido}
+      <p style="color:#ffa94d;font-size:12px;margin:8px 0 0">
+        {#if form.tipo === "ssh"}Compila almeno <b>Host</b> e <b>Utente</b>.
+        {:else if form.tipo === "telnet" || form.tipo === "vnc"}Compila l'<b>Host</b>.
+        {:else if form.tipo === "seriale"}Scegli la <b>porta seriale</b>.
+        {/if}
+      </p>
+    {/if}
+
     <div class="pulsanti">
       <button onclick={onChiudi}>Annulla</button>
       <button onclick={() => onSalva(form)} disabled={!valido} title="Salva nella rubrica senza connettere">

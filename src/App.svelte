@@ -332,63 +332,68 @@
   }
 
   // Apre una nuova scheda a partire dal form di connessione.
-  async function connetti(form) {
-    const auth =
-      form.metodo === "password"
-        ? { tipo: "password", password: form.password }
-        : {
-            tipo: "chiave",
-            percorso: form.percorsoChiave,
-            passphrase: form.passphrase || null,
-          };
+  function connetti(form) {
+    try {
+      const auth =
+        form.metodo === "chiave"
+          ? {
+              tipo: "chiave",
+              percorso: form.percorsoChiave,
+              passphrase: form.passphrase || null,
+            }
+          : { tipo: "password", password: form.password };
 
-    // Eventuale jump host (ProxyJump).
-    const jump = form.usaJump
-      ? {
-          host: form.jump_host,
-          porta: Number(form.jump_porta),
-          utente: form.jump_utente,
-          auth:
-            form.jump_metodo === "password"
-              ? { tipo: "password", password: form.jump_password }
-              : {
-                  tipo: "chiave",
-                  percorso: form.jump_chiave,
-                  passphrase: form.jump_passphrase || null,
-                },
-        }
-      : null;
+      // Eventuale jump host (ProxyJump).
+      const jump = form.usaJump
+        ? {
+            host: form.jump_host,
+            porta: Number(form.jump_porta),
+            utente: form.jump_utente,
+            auth:
+              form.jump_metodo === "chiave"
+                ? {
+                    tipo: "chiave",
+                    percorso: form.jump_chiave,
+                    passphrase: form.jump_passphrase || null,
+                  }
+                : { tipo: "password", password: form.jump_password },
+          }
+        : null;
 
-    const nome = nomeDi(form);
+      const tid = nuovoId();
+      const tab = {
+        id: tid,
+        tipo: form.tipo,
+        nome: nomeDi(form),
+        host: form.host,
+        porta: Number(form.porta) || 22,
+        utente: form.utente,
+        auth,
+        jump,
+        vnc_password: form.vnc_password,
+        shell: form.shell,
+        porta_seriale: form.porta_seriale,
+        baud: Number(form.baud) || 115200,
+        colore: form.colore,
+        comandi_avvio: form.comandi_avvio,
+        layout: "singolo", // singolo | h (affiancati) | v (impilati)
+        panes: [{ pid: tid, connesso: false, stato: "connessione" }],
+      };
 
-    const tid = nuovoId();
-    const tab = {
-      id: tid,
-      tipo: form.tipo,
-      nome,
-      host: form.host,
-      porta: Number(form.porta),
-      utente: form.utente,
-      auth,
-      jump,
-      vnc_password: form.vnc_password,
-      shell: form.shell,
-      porta_seriale: form.porta_seriale,
-      baud: Number(form.baud),
-      colore: form.colore,
-      comandi_avvio: form.comandi_avvio,
-      layout: "singolo", // singolo | h (affiancati) | v (impilati)
-      panes: [{ pid: tid, connesso: false, stato: "connessione" }],
-    };
+      // Apri SUBITO la scheda: la connessione non deve dipendere dal salvataggio.
+      tabs.push(tab);
+      tabAttivoId = tid;
+      mostraForm = false;
 
-    if (form.salva) {
-      await salvaInRubrica(form);
-      caricaSessioni();
+      // Salva in background (se richiesto), senza bloccare la connessione.
+      if (form.salva) {
+        salvaInRubrica(form)
+          .then(() => caricaSessioni())
+          .catch((e) => alert("Salvataggio non riuscito: " + e));
+      }
+    } catch (e) {
+      alert("Impossibile aprire la sessione: " + e);
     }
-
-    tabs.push(tab);
-    tabAttivoId = tab.id;
-    mostraForm = false;
   }
 
   async function chiudiTab(id) {
