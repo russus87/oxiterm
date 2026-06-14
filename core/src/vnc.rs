@@ -22,7 +22,7 @@ pub enum ComandoVnc {
     Chiudi,
 }
 
-/// Un rettangolo di schermo aggiornato (RGBA), o un evento di ridimensionamento.
+/// Un rettangolo di schermo aggiornato (RGBA), un ridimensionamento, o un cursore.
 pub struct FrameVnc {
     pub x: u16,
     pub y: u16,
@@ -30,6 +30,8 @@ pub struct FrameVnc {
     pub h: u16,
     pub rgba: Vec<u8>,
     pub resize: Option<(u16, u16)>,
+    /// Se valorizzato, questo frame è il cursore del mouse (hotspot x, y).
+    pub cursore: Option<(u16, u16)>,
 }
 
 /// Estremità del client VNC: input verso il server, frame in arrivo.
@@ -133,6 +135,7 @@ pub fn apri(host: &str, porta: u16, password: Option<String>) -> Result<CanaleVn
                                 h: r.height,
                                 rgba,
                                 resize: None,
+                                cursore: None,
                             })
                             .is_err()
                         {
@@ -149,6 +152,7 @@ pub fn apri(host: &str, porta: u16, password: Option<String>) -> Result<CanaleVn
                             h: nh,
                             rgba: Vec::new(),
                             resize: Some((nw, nh)),
+                            cursore: None,
                         });
                         let _ = client.request_update(
                             Rect {
@@ -159,6 +163,26 @@ pub fn apri(host: &str, porta: u16, password: Option<String>) -> Result<CanaleVn
                             },
                             false,
                         );
+                    }
+                    Some(Event::SetCursor {
+                        size,
+                        hotspot,
+                        pixels,
+                        mask_bits,
+                    }) => {
+                        let (cw, ch) = size;
+                        if cw > 0 && ch > 0 {
+                            let rgba = converti_cursore(&pixels, &mask_bits, &formato, cw, ch);
+                            let _ = tx_frame.blocking_send(FrameVnc {
+                                x: 0,
+                                y: 0,
+                                w: cw,
+                                h: ch,
+                                rgba,
+                                resize: None,
+                                cursore: Some(hotspot),
+                            });
+                        }
                     }
                     Some(Event::Disconnected(_)) => return,
                     Some(_) => {}
@@ -218,6 +242,54 @@ fn componente(px: u32, shift: u8, max: u16) -> u8 {
     }
     let v = (px >> shift) & (max as u32);
     ((v * 255) / (max as u32)) as u8
+}
+
+/// Legge un pixel (u32) da un buffer secondo bpp ed endianness.
+fn leggi_px(dati: &[u8], bpp: usize, big_endian: bool) -> u32 {
+    match bpp {
+        4 => {
+            let a = [dati[0], dati[1], dati[2], dati[3]];
+            if big_endian {
+                u32::from_be_bytes(a)
+            } else {
+                u32::from_le_bytes(a)
+            }
+        }
+        2 => {
+            let a = [dati[0], dati[1]];
+            if big_endian {
+                u16::from_be_bytes(a) as u32
+            } else {
+                u16::from_le_bytes(a) as u32
+            }
+        }
+        _ => dati[0] as u32,
+    }
+}
+
+/// Converte il cursore (pixel + maschera di trasparenza) in RGBA.
+fn converti_cursore(pixels: &[u8], mask: &[u8], f: &PixelFormat, w: u16, h: u16) -> Vec<u8> {
+    let bpp = ((f.bits_per_pixel / 8) as usize).max(1);
+    let wn = w as usize;
+    let hn = h as usize;
+    let riga_mask = (wn + 7) / 8;
+    let mut out = vec![0u8; wn * hn * 4];
+    for y in 0..hn {
+        for x in 0..wn {
+            let i = y * wn + x;
+            let off = i * bpp;
+            if off + bpp <= pixels.len() {
+                let px = leggi_px(&pixels[off..], bpp, f.big_endian);
+                out[i * 4] = componente(px, f.red_shift, f.red_max);
+                out[i * 4 + 1] = componente(px, f.green_shift, f.green_max);
+                out[i * 4 + 2] = componente(px, f.blue_shift, f.blue_max);
+            }
+            let mb = y * riga_mask + x / 8;
+            let opaco = mb < mask.len() && ((mask[mb] >> (7 - (x % 8))) & 1) == 1;
+            out[i * 4 + 3] = if opaco { 255 } else { 0 };
+        }
+    }
+    out
 }
 
 #[cfg(test)]

@@ -79,6 +79,7 @@ struct FrameVncView {
     h: u16,
     dati: String,
     resize: Option<(u16, u16)>,
+    cursore: Option<(u16, u16)>,
 }
 
 /// File con la rubrica delle sessioni salvate.
@@ -276,6 +277,7 @@ async fn apri_vnc(
                     h: f.h,
                     dati,
                     resize: f.resize,
+                    cursore: f.cursore,
                 },
             );
         }
@@ -319,6 +321,45 @@ async fn vnc_chiudi(stato: State<'_, StatoVnc>, id: String) -> Result<(), String
         let _ = tx.send(ComandoVnc::Chiudi).await;
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Strumenti di rete (locali) e monitor server
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn net_porta(host: String, porta: u16) -> bool {
+    oxiterm_core::net::porta_aperta(&host, porta).await
+}
+
+#[tauri::command]
+fn net_ping(host: String) -> Result<String, String> {
+    oxiterm_core::net::ping(&host)
+}
+
+#[tauri::command]
+fn net_traceroute(host: String) -> Result<String, String> {
+    oxiterm_core::net::traceroute(&host)
+}
+
+#[tauri::command]
+fn net_wol(mac: String) -> Result<(), String> {
+    oxiterm_core::net::wake_on_lan(&mac)
+}
+
+/// Snapshot dello stato del server (uptime, memoria, disco, processi) via SSH.
+#[tauri::command]
+async fn server_stato(stato: State<'_, Sessioni>, id: String) -> Result<String, String> {
+    let mappa = stato.0.lock().await;
+    let s = mappa.get(&id).ok_or("sessione inesistente")?;
+    let conn = s.ssh.as_ref().ok_or("disponibile solo per sessioni SSH")?;
+    conn.esegui(
+        "export LANG=C; echo '== UPTIME =='; uptime; \
+         echo; echo '== MEMORIA =='; (free -h 2>/dev/null || vm_stat 2>/dev/null); \
+         echo; echo '== DISCO =='; df -h / 2>/dev/null; \
+         echo; echo '== PROCESSI =='; (top -bn1 2>/dev/null | head -12 || ps aux | head -12)",
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------
@@ -1104,6 +1145,11 @@ pub fn run() {
             vnc_mouse,
             vnc_tasto,
             vnc_chiudi,
+            net_porta,
+            net_ping,
+            net_traceroute,
+            net_wol,
+            server_stato,
             term_scrivi,
             term_ridimensiona,
             term_chiudi,

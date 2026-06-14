@@ -56,6 +56,13 @@ export const vncMouse = (id, x, y, bottoni) =>
 export const vncTasto = (id, giu, key) => invoke("vnc_tasto", { id, giu, key });
 export const vncChiudi = (id) => invoke("vnc_chiudi", { id });
 
+// ---- Strumenti di rete + monitor ----
+export const netPorta = (host, porta) => invoke("net_porta", { host, porta });
+export const netPing = (host) => invoke("net_ping", { host });
+export const netTraceroute = (host) => invoke("net_traceroute", { host });
+export const netWol = (mac) => invoke("net_wol", { mac });
+export const serverStato = (id) => invoke("server_stato", { id });
+
 // ---- Tunnel SSH ----
 export const tunnelLocale = (id, portaLocale, hostRemoto, portaRemota) =>
   invoke("tunnel_locale", { id, portaLocale, hostRemoto, portaRemota });

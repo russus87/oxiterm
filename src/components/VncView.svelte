@@ -59,13 +59,21 @@
           canvas.height = f.resize[1];
           return;
         }
-        // Decodifica base64 -> RGBA -> disegno del rettangolo.
+        // Decodifica base64 -> RGBA.
         const bin = atob(f.dati);
         const arr = new Uint8ClampedArray(bin.length);
         for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        if (arr.length >= f.w * f.h * 4) {
-          ctx.putImageData(new ImageData(arr, f.w, f.h), f.x, f.y);
+        if (arr.length < f.w * f.h * 4) return;
+        if (f.cursore) {
+          // È il cursore remoto: lo impostiamo come cursore CSS del canvas.
+          const oc = document.createElement("canvas");
+          oc.width = f.w;
+          oc.height = f.h;
+          oc.getContext("2d").putImageData(new ImageData(arr, f.w, f.h), 0, 0);
+          canvas.style.cursor = `url(${oc.toDataURL()}) ${f.cursore[0]} ${f.cursore[1]}, auto`;
+          return;
         }
+        ctx.putImageData(new ImageData(arr, f.w, f.h), f.x, f.y);
       }),
     );
     off.push(

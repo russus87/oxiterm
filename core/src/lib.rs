@@ -11,6 +11,7 @@
 pub mod chiavi;
 pub mod locale;
 pub mod model;
+pub mod net;
 pub mod seriale;
 pub mod sftp;
 pub mod ssh;

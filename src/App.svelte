@@ -21,6 +21,8 @@
   import CodaTrasferimenti from "./components/CodaTrasferimenti.svelte";
   import GestioneChiavi from "./components/GestioneChiavi.svelte";
   import ReplayView from "./components/ReplayView.svelte";
+  import StrumentiRete from "./components/StrumentiRete.svelte";
+  import MonitorServer from "./components/MonitorServer.svelte";
 
   let sessioni = $state([]); // rubrica salvata
   let tabs = $state([]); // sessioni aperte
@@ -35,6 +37,8 @@
   let mostraPalette = $state(false);
   let mostraChiavi = $state(false);
   let mostraReplay = $state(false);
+  let mostraRete = $state(false);
+  let mostraMonitor = $state(false);
   let hostKey = $state(null); // { id, stato, impronta } per il prompt known_hosts
 
   // Vault cifrato delle password.
@@ -595,6 +599,7 @@
         {vault.sbloccato ? "🔓 Vault" : "🔒 Vault"}
       </button>
       <button style="flex:1" title="Replay registrazioni" onclick={() => (mostraReplay = true)}>▶ Replay</button>
+      <button style="flex:1" title="Strumenti di rete" onclick={() => (mostraRete = true)}>🌐 Rete</button>
     </div>
     <div class="azioni" style="display:flex;gap:6px">
       <button style="flex:1" onclick={() => (mostraSnippet = true)}>✂ Snippet</button>
@@ -648,6 +653,7 @@
         <button class="strumento" title="Dividi impilato" onclick={() => split("v")}>▤</button>
         <button class="strumento" title="Duplica scheda" onclick={() => duplica(tabAttivo)}>⧉</button>
         {#if tabAttivo.tipo === "ssh"}
+          <button class="strumento" title="Monitor server" onclick={() => (mostraMonitor = true)}>📊</button>
           <button class="strumento" title="Tunnel SSH" onclick={() => (mostraTunnel = true)}>🚇 Tunnel</button>
         {/if}
       {/if}
@@ -753,6 +759,17 @@
 
 {#if mostraReplay}
   <ReplayView onChiudi={() => (mostraReplay = false)} />
+{/if}
+
+{#if mostraRete}
+  <StrumentiRete
+    hostIniziale={tabAttivo?.host ?? ""}
+    onChiudi={() => (mostraRete = false)}
+  />
+{/if}
+
+{#if mostraMonitor && tabAttivo}
+  <MonitorServer id={tabAttivo.panes[0].pid} onChiudi={() => (mostraMonitor = false)} />
 {/if}
 
 {#if mostraVault}
