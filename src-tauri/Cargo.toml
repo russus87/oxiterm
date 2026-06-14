@@ -1,6 +1,6 @@
 [package]
 name = "oxiterm"
-version = "0.5.1"
+version = "0.5.2"
 description = "Oxiterm - terminale SSH/SFTP a schede"
 authors = ["Antonio Russo"]
 license = "MIT"

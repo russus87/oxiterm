@@ -1,7 +1,13 @@
 // Versione dell'app e changelog, mostrati nel pannello Info.
-export const VERSIONE = "0.5.1";
+export const VERSIONE = "0.5.2";
 
 export const changelog = [
+  {
+    versione: "0.5.2",
+    note: [
+      "Fix pacchetto Arch: compilato in modalità produzione (non cerca più localhost)",
+    ],
+  },
   {
     versione: "0.5.1",
     note: ["Pacchetto Arch Linux (.pkg.tar.zst) generato dalla CI"],

@@ -20,9 +20,11 @@ _repo() { echo "$startdir/.."; }
 build() {
     cd "$(_repo)"
     npm install
-    # Genera il frontend (dist/), che Tauri incorpora nel binario.
-    npm run build
-    cargo build --release -p oxiterm
+    # IMPORTANTE: si compila con la CLI di Tauri (non con cargo diretto), così
+    # l'app è in modalità produzione e incorpora il frontend nel binario.
+    # Con cargo build puro resterebbe in modalità dev e cercherebbe localhost:1420.
+    # --no-bundle: niente installer, il pacchetto lo fa makepkg.
+    npm run tauri build -- --no-bundle
 }
 
 package() {
