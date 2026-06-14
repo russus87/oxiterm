@@ -1,7 +1,14 @@
 // Versione dell'app e changelog, mostrati nel pannello Info.
-export const VERSIONE = "0.6.0";
+export const VERSIONE = "0.6.1";
 
 export const changelog = [
+  {
+    versione: "0.6.1",
+    note: [
+      "Repo sorgente pubblico: auto-update direttamente dalle release di GitHub",
+      "Rimosso il repo dist separato (semplificazione)",
+    ],
+  },
   {
     versione: "0.6.0",
     note: [

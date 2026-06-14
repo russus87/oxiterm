@@ -103,37 +103,3 @@ jobs:
           files: packaging/*.pkg.tar.zst
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # --- Pubblica gli artefatti (e l'auto-update) sul repo pubblico oxiterm-dist ---
-  pubblica-dist:
-    runs-on: ubuntu-latest
-    needs: [build, arch]
-    steps:
-      - name: Scarica gli asset dalla release (privata)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir dist-assets
-          gh release download "${GITHUB_REF_NAME}" \
-            --repo "${GITHUB_REPOSITORY}" --dir dist-assets
-
-      - name: Riscrivi gli URL di latest.json verso il repo pubblico
-        run: |
-          cd dist-assets
-          if [ -f latest.json ]; then
-            sed -i 's#/russus87/oxiterm/releases#/russus87/oxiterm-dist/releases#g' latest.json
-            echo "latest.json aggiornato:"; cat latest.json
-          else
-            echo "ATTENZIONE: latest.json non trovato"; ls -la
-          fi
-
-      - name: Pubblica su oxiterm-dist
-        env:
-          GH_TOKEN: ${{ secrets.DIST_TOKEN }}
-        run: |
-          cd dist-assets
-          gh release create "${GITHUB_REF_NAME}" --repo russus87/oxiterm-dist \
-            --title "Oxiterm ${GITHUB_REF_NAME}" \
-            --notes "Artefatti e aggiornamenti automatici di Oxiterm." \
-            ./* \
-          || gh release upload "${GITHUB_REF_NAME}" --repo russus87/oxiterm-dist --clobber ./*

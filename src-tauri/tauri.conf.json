@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Oxiterm",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "identifier": "com.oxiterm.app",
   "build": {
     "frontendDist": "../dist",
@@ -40,7 +40,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/russus87/oxiterm-dist/releases/latest/download/latest.json"
+        "https://github.com/russus87/oxiterm/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcxQzM0RDlDRURDMzA3QjgKUldTNEI4UHRuRTNEY2ZWcGlrS1ZXSk5BTUlpYTN1UHVTdkJSOEVXQ0hHdXRrNC95Z0x1QXRvSDcK"
     }
