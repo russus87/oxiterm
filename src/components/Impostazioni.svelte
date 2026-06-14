@@ -89,6 +89,29 @@
       <label for="recon" style="margin:0">Riconnetti automaticamente le sessioni cadute</label>
     </div>
 
+    <h2 style="font-size:14px;margin-top:18px">Interfaccia</h2>
+    <div class="riga">
+      <div class="campo" style="flex:1">
+        <label>Tema app</label>
+        <select bind:value={impostazioni.temaApp}>
+          <option value="scuro">Scuro</option>
+          <option value="chiaro">Chiaro</option>
+        </select>
+      </div>
+      <div class="campo" style="flex:1">
+        <label>Scala UI (%)</label>
+        <input type="number" min="60" max="200" step="10" bind:value={impostazioni.scalaUI} />
+      </div>
+    </div>
+    <div class="campo" style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" bind:checked={impostazioni.notifiche} style="width:auto" id="notif" />
+      <label for="notif" style="margin:0">Notifiche desktop (sessione caduta, trasferimenti)</label>
+    </div>
+    <div class="campo" style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" bind:checked={impostazioni.ripristina} style="width:auto" id="ripr" />
+      <label for="ripr" style="margin:0">Riapri le ultime sessioni all'avvio</label>
+    </div>
+
     <h2 style="font-size:14px;margin-top:18px">Sincronizzazione cloud (Git)</h2>
     <p style="color:var(--testo2);font-size:11px;margin:0 0 8px">
       Salva la rubrica in un repository Git (GitHub/GitLab…) per averla su più PC.

@@ -121,6 +121,14 @@ pub async fn leggi_testo(sftp: &SftpSession, remoto: &str) -> Result<String, Str
     Ok(String::from_utf8_lossy(&buf).to_string())
 }
 
+/// Legge un file remoto come byte grezzi (per l'anteprima di immagini).
+pub async fn leggi_bytes(sftp: &SftpSession, remoto: &str) -> Result<Vec<u8>, String> {
+    let mut f = sftp.open(remoto).await.map_err(|e| e.to_string())?;
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf).await.map_err(|e| e.to_string())?;
+    Ok(buf)
+}
+
 /// Scrive testo in un file remoto (sovrascrive).
 pub async fn scrivi_testo(sftp: &SftpSession, remoto: &str, contenuto: &str) -> Result<(), String> {
     let mut f = sftp.create(remoto).await.map_err(|e| e.to_string())?;

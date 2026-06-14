@@ -1,19 +1,24 @@
-// Segnalibri SFTP: percorsi preferiti, salvati in localStorage.
-const CHIAVE = "oxiterm-segnalibri";
+// Segnalibri SFTP: percorsi preferiti, salvati nel backend (così rientrano
+// nella sincronizzazione cloud insieme alla rubrica).
+import * as api from "./api.js";
 
-function carica() {
+export const segnalibri = $state([]);
+let caricato = false;
+
+// Da chiamare una volta all'avvio dell'app.
+export async function caricaSegnalibri() {
   try {
-    return JSON.parse(localStorage.getItem(CHIAVE) || "[]");
-  } catch {
-    return [];
-  }
+    const l = await api.listaSegnalibri();
+    segnalibri.splice(0, segnalibri.length, ...l);
+  } catch {}
+  caricato = true;
 }
 
-export const segnalibri = $state(carica());
-
+// Salva sul backend a ogni modifica (dopo il caricamento iniziale).
 $effect.root(() => {
   $effect(() => {
-    localStorage.setItem(CHIAVE, JSON.stringify(segnalibri));
+    const copia = [...segnalibri];
+    if (caricato) api.salvaSegnalibri(copia).catch(() => {});
   });
 });
 

@@ -14,6 +14,7 @@ pub mod model;
 pub mod seriale;
 pub mod sftp;
 pub mod ssh;
+pub mod sshconfig;
 pub mod storage;
 pub mod telnet;
 pub mod term;

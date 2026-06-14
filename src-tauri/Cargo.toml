@@ -23,6 +23,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
 # La logica vera (SSH/SFTP) vive nel crate "core".
 oxiterm-core = { path = "../core" }
 # Per i canali e i Mutex asincroni usati nello stato condiviso.

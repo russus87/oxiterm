@@ -30,6 +30,7 @@
       gruppo: "",
       colore: "#37b24d",
       tags: "",
+      comandi_avvio: "",
       salva: true,
       salvaVault: false,
       // VNC
@@ -239,6 +240,18 @@
       <label>Tag (separati da virgola)</label>
       <input bind:value={form.tags} placeholder="prod, web, cliente-x" />
     </div>
+
+    {#if form.tipo !== "vnc"}
+      <div class="campo">
+        <label>Comandi all'avvio (uno per riga)</label>
+        <textarea
+          bind:value={form.comandi_avvio}
+          rows="2"
+          placeholder="cd /var/log&#10;tail -f syslog"
+          style="width:100%;font-family:monospace;font-size:12px;resize:vertical"
+        ></textarea>
+      </div>
+    {/if}
 
     <div class="campo" style="display:flex;align-items:center;gap:8px">
       <input type="checkbox" bind:checked={form.salva} style="width:auto" id="salva" />

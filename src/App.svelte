@@ -7,6 +7,7 @@
   import * as api from "./lib/api.js";
   import { nuovoId } from "./lib/id.js";
   import { impostazioni } from "./lib/impostazioni.svelte.js";
+  import { caricaSegnalibri } from "./lib/segnalibri.svelte.js";
   import Terminale from "./components/Terminale.svelte";
   import Sftp from "./components/Sftp.svelte";
   import FormConnessione from "./components/FormConnessione.svelte";
@@ -64,10 +65,72 @@
     return [...m.entries()];
   });
 
+  const CHIAVE_TABS = "oxiterm-tabs-aperte";
+
   onMount(async () => {
     await caricaSessioni();
     await aggiornaVault();
+    await caricaSegnalibri();
+    if (impostazioni.ripristina) ripristinaSessioni();
   });
+
+  // Applica tema e scala dell'interfaccia a caldo.
+  $effect(() => {
+    document.documentElement.setAttribute("data-tema", impostazioni.temaApp);
+    document.body.style.zoom = impostazioni.scalaUI / 100;
+  });
+
+  // Salva le schede ripristinabili (senza segreti) per riaprirle all'avvio.
+  $effect(() => {
+    const dati = tabs
+      .filter((t) => restorabile(t))
+      .map((t) => ({
+        tipo: t.tipo,
+        nome: t.nome,
+        host: t.host,
+        porta: t.porta,
+        utente: t.utente,
+        shell: t.shell,
+        porta_seriale: t.porta_seriale,
+        baud: t.baud,
+        colore: t.colore,
+        comandi_avvio: t.comandi_avvio,
+        chiave: t.auth?.tipo === "chiave" ? t.auth.percorso : null,
+      }));
+    try {
+      localStorage.setItem(CHIAVE_TABS, JSON.stringify(dati));
+    } catch {}
+  });
+
+  // Una scheda è ripristinabile se non richiede un segreto non memorizzabile.
+  function restorabile(t) {
+    if (["locale", "telnet", "seriale"].includes(t.tipo)) return true;
+    if (t.tipo === "vnc") return !t.vnc_password;
+    if (t.tipo === "ssh") return t.auth?.tipo === "chiave" && !t.auth?.passphrase;
+    return false;
+  }
+
+  function ripristinaSessioni() {
+    let dati = [];
+    try {
+      dati = JSON.parse(localStorage.getItem(CHIAVE_TABS) || "[]");
+    } catch {}
+    for (const d of dati) {
+      const tid = nuovoId();
+      const auth = d.chiave
+        ? { tipo: "chiave", percorso: d.chiave, passphrase: null }
+        : { tipo: "password", password: "" };
+      tabs.push({
+        ...d,
+        id: tid,
+        auth,
+        jump: null,
+        layout: "singolo",
+        panes: [{ pid: tid, connesso: false, stato: "connessione" }],
+      });
+      if (!tabAttivoId) tabAttivoId = tid;
+    }
+  }
 
   async function caricaSessioni() {
     try {
@@ -105,6 +168,55 @@
     mostraForm = true;
   }
 
+  // Quick connect: "utente@host:porta". Se combacia con una salvata, la apre;
+  // altrimenti precompila il form.
+  let quick = $state("");
+  function quickConnect() {
+    let s = quick.trim();
+    if (!s) return;
+    let utente = "";
+    let host = s;
+    let porta = 22;
+    if (s.includes("@")) [utente, host] = s.split("@");
+    if (host.includes(":")) {
+      const [h, p] = host.split(":");
+      host = h;
+      porta = Number(p) || 22;
+    }
+    quick = "";
+    const m = sessioni.find(
+      (x) => (x.tipo || "ssh") === "ssh" && x.host === host && (!utente || x.utente === utente),
+    );
+    if (m) {
+      apriSalvata(m);
+      return;
+    }
+    formIniziale = { tipo: "ssh", host, porta, utente, salva: false };
+    mostraForm = true;
+  }
+
+  // Importa gli host da ~/.ssh/config.
+  async function importaConfig() {
+    try {
+      const n = await api.importaSshConfig();
+      await caricaSessioni();
+      alert(`Importate ${n} nuove sessioni da ~/.ssh/config.`);
+    } catch (e) {
+      alert(e);
+    }
+  }
+
+  // Riordino schede col drag & drop.
+  let trascinato = null;
+  function rilascia(i) {
+    if (trascinato === null || trascinato === i) return;
+    const arr = [...tabs];
+    const [x] = arr.splice(trascinato, 1);
+    arr.splice(i, 0, x);
+    tabs = arr;
+    trascinato = null;
+  }
+
   async function apriSalvata(s) {
     // Se il vault è sbloccato, recupera la password salvata per questa sessione.
     let password = "";
@@ -134,6 +246,7 @@
       gruppo: s.gruppo || "",
       colore: s.colore || "#37b24d",
       tags: (s.tags || []).join(", "),
+      comandi_avvio: s.comandi_avvio || "",
       usaJump: !!s.jump_host,
       jump_host: s.jump_host || "",
       jump_porta: s.jump_porta || 22,
@@ -188,6 +301,7 @@
       porta_seriale: form.porta_seriale || null,
       baud: form.tipo === "seriale" ? Number(form.baud) : null,
       tags,
+      comandi_avvio: form.comandi_avvio || null,
       jump_host: form.usaJump ? form.jump_host : null,
       jump_porta: form.usaJump ? Number(form.jump_porta) : null,
       jump_utente: form.usaJump ? form.jump_utente : null,
@@ -256,6 +370,7 @@
       porta_seriale: form.porta_seriale,
       baud: Number(form.baud),
       colore: form.colore,
+      comandi_avvio: form.comandi_avvio,
       layout: "singolo", // singolo | h (affiancati) | v (impilati)
       panes: [{ pid: tid, connesso: false, stato: "connessione" }],
     };
@@ -429,10 +544,19 @@
     <h1><span class="pallino"></span> Oxiterm</h1>
     <div class="azioni">
       <button class="primario" onclick={nuovaConnessione}>+ Nuova sessione</button>
+      <input
+        style="margin-top:6px"
+        placeholder="Quick connect: utente@host:porta"
+        bind:value={quick}
+        onkeydown={(e) => e.key === "Enter" && quickConnect()}
+      />
       <div style="display:flex;gap:6px;margin-top:6px">
         <button style="flex:1" title="Importa rubrica" onclick={importa}>⬇ Importa</button>
         <button style="flex:1" title="Esporta rubrica" onclick={esporta}>⬆ Esporta</button>
       </div>
+      <button style="width:100%;margin-top:6px" title="Importa da ~/.ssh/config" onclick={importaConfig}>
+        ↧ Importa da ~/.ssh/config
+      </button>
     </div>
     <div class="lista-sessioni">
       {#each gruppi as [nomeGruppo, lista] (nomeGruppo)}
@@ -480,10 +604,14 @@
   <!-- Area principale -->
   <main class="principale">
     <div class="tabbar">
-      {#each tabs as t (t.id)}
+      {#each tabs as t, i (t.id)}
         <div
           class="tab {t.id === tabAttivoId ? 'attivo' : ''}"
           style={t.colore ? `border-top:2px solid ${t.colore}` : ""}
+          draggable="true"
+          ondragstart={() => (trascinato = i)}
+          ondragover={(e) => e.preventDefault()}
+          ondrop={() => rilascia(i)}
           onclick={() => (tabAttivoId = t.id)}
         >
           <span class="dot" style="background:{statoColore(t)}"></span>

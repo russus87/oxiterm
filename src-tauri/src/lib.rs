@@ -749,6 +749,22 @@ async fn sftp_scrivi_testo(
     .await
 }
 
+/// Legge un file remoto e lo restituisce in base64 (anteprima immagini).
+#[tauri::command]
+async fn sftp_leggi_base64(
+    stato: State<'_, Sessioni>,
+    id: String,
+    remoto: String,
+) -> Result<String, String> {
+    con_sftp(&stato, &id, move |c| async move {
+        let r = sftp::leggi_bytes(&c, &remoto)
+            .await
+            .map(|b| base64::engine::general_purpose::STANDARD.encode(b));
+        (c, r)
+    })
+    .await
+}
+
 /// Carica ricorsivamente una cartella locale.
 #[tauri::command]
 async fn sftp_carica_cartella(
@@ -871,6 +887,56 @@ fn elimina_sessione(app: tauri::AppHandle, id: String) -> Result<(), String> {
     let mut tutte = storage::carica_sessioni(&file);
     tutte.retain(|s| s.id != id);
     storage::salva_sessioni(&file, &tutte)
+}
+
+/// Importa gli host da ~/.ssh/config nella rubrica. Ritorna quanti aggiunti.
+#[tauri::command]
+fn importa_ssh_config(app: tauri::AppHandle) -> Result<usize, String> {
+    let p = oxiterm_core::chiavi::dir_ssh().join("config");
+    let testo = std::fs::read_to_string(&p)
+        .map_err(|e| format!("impossibile leggere ~/.ssh/config: {e}"))?;
+    let nuove = oxiterm_core::sshconfig::parse(&testo);
+    let file = file_sessioni(&app)?;
+    let mut tutte = storage::carica_sessioni(&file);
+    let mut aggiunte = 0;
+    for n in nuove {
+        match tutte.iter_mut().find(|s| s.id == n.id) {
+            Some(e) => *e = n,
+            None => {
+                tutte.push(n);
+                aggiunte += 1;
+            }
+        }
+    }
+    storage::salva_sessioni(&file, &tutte)?;
+    Ok(aggiunte)
+}
+
+// ---------------------------------------------------------------------------
+// Segnalibri SFTP (sincronizzabili: salvati nella cartella di config)
+// ---------------------------------------------------------------------------
+
+fn file_segnalibri(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    Ok(dir.join("segnalibri.json"))
+}
+
+#[tauri::command]
+fn lista_segnalibri(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    Ok(std::fs::read_to_string(file_segnalibri(&app)?)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default())
+}
+
+#[tauri::command]
+fn salva_segnalibri(app: tauri::AppHandle, lista: Vec<String>) -> Result<(), String> {
+    let f = file_segnalibri(&app)?;
+    if let Some(d) = f.parent() {
+        std::fs::create_dir_all(d).ok();
+    }
+    std::fs::write(f, serde_json::to_string_pretty(&lista).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())
 }
 
 /// Esporta la rubrica delle sessioni in un file JSON scelto dall'utente.
@@ -1022,6 +1088,7 @@ pub fn run() {
         .plugin(tauri_plugin_log::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(Sessioni::default())
         .manage(StatoVnc::default())
         .manage(StatoVault::default())
@@ -1065,9 +1132,13 @@ pub fn run() {
             sftp_scrivi_testo,
             sftp_carica_cartella,
             sftp_scarica_cartella,
+            sftp_leggi_base64,
             lista_sessioni,
             salva_sessione,
             elimina_sessione,
+            importa_ssh_config,
+            lista_segnalibri,
+            salva_segnalibri,
             esporta_rubrica,
             importa_rubrica,
             lista_snippet,

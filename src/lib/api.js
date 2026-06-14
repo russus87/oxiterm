@@ -87,6 +87,7 @@ export const sftpCaricaCartella = (id, locale, remoto) =>
   invoke("sftp_carica_cartella", { id, locale, remoto });
 export const sftpScaricaCartella = (id, remoto, locale) =>
   invoke("sftp_scarica_cartella", { id, remoto, locale });
+export const sftpLeggiBase64 = (id, remoto) => invoke("sftp_leggi_base64", { id, remoto });
 export const sftpCaricaCoda = (id, trasferimento, locale, remoto) =>
   invoke("sftp_carica_coda", { id, trasferimento, locale, remoto });
 export const sftpScaricaCoda = (id, trasferimento, remoto, locale) =>
@@ -98,6 +99,11 @@ export const salvaSessione = (sessione) => invoke("salva_sessione", { sessione }
 export const eliminaSessione = (id) => invoke("elimina_sessione", { id });
 export const esportaRubrica = (percorso) => invoke("esporta_rubrica", { percorso });
 export const importaRubrica = (percorso) => invoke("importa_rubrica", { percorso });
+export const importaSshConfig = () => invoke("importa_ssh_config");
+
+// ---- Segnalibri SFTP (sincronizzabili) ----
+export const listaSegnalibri = () => invoke("lista_segnalibri");
+export const salvaSegnalibri = (lista) => invoke("salva_segnalibri", { lista });
 
 // ---- Sincronizzazione cloud (Git) ----
 export const syncRemote = () => invoke("sync_remote");

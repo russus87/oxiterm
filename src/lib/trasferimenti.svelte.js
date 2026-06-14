@@ -1,6 +1,7 @@
 // Coda globale dei trasferimenti SFTP, con avanzamento in tempo reale.
 // Il backend emette eventi "sftp-progresso" con { id, fatti, totale }.
 import { listen } from "@tauri-apps/api/event";
+import { notifica } from "./notifiche.js";
 
 export const trasferimenti = $state([]); // { id, nome, verso, fatti, totale, stato }
 
@@ -10,7 +11,13 @@ export function aggiungi(id, nome, verso) {
 
 export function completa(id, ok) {
   const t = trasferimenti.find((x) => x.id === id);
-  if (t) t.stato = ok ? "fatto" : "errore";
+  if (t) {
+    t.stato = ok ? "fatto" : "errore";
+    notifica(
+      ok ? "Trasferimento completato" : "Trasferimento fallito",
+      t.nome,
+    );
+  }
 }
 
 export function pulisci() {

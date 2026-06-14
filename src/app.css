@@ -11,6 +11,16 @@
   --pericolo: #e03131;
 }
 
+/* Tema chiaro dell'interfaccia (il terminale ha i suoi temi a parte). */
+:root[data-tema="chiaro"] {
+  --sfondo: #f5f5f5;
+  --sfondo2: #eaeaea;
+  --sfondo3: #dddddd;
+  --bordo: #c4c4c4;
+  --testo: #1e1e1e;
+  --testo2: #5a5a5a;
+}
+
 * {
   box-sizing: border-box;
 }

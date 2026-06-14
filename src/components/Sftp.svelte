@@ -9,10 +9,12 @@
   import { aggiungi, completa } from "../lib/trasferimenti.svelte.js";
   import { segnalibri, aggiungi as aggSegnalibro, rimuovi as rimSegnalibro } from "../lib/segnalibri.svelte.js";
   import EditorRemoto from "./EditorRemoto.svelte";
+  import Anteprima from "./Anteprima.svelte";
 
   let { id, pronto, attivo } = $props();
   let scollega;
   let editorPercorso = $state(null); // file aperto nell'editor integrato
+  let anteprima = $state(null); // { percorso, nome } in anteprima
   let mostraSegnalibri = $state(false);
 
   let percorso = $state("");
@@ -256,6 +258,7 @@
           {#if v.dir}
             <button title="Scarica cartella" onclick={(e) => (e.stopPropagation(), scaricaCartella(v))}>⬇📁</button>
           {:else}
+            <button title="Anteprima" onclick={(e) => (e.stopPropagation(), (anteprima = { percorso: unisci(percorso, v.nome), nome: v.nome }))}>👁</button>
             <button title="Modifica (editor integrato)" onclick={(e) => (e.stopPropagation(), (editorPercorso = unisci(percorso, v.nome)))}>📝</button>
             <button title="Apri in editor di sistema" onclick={(e) => (e.stopPropagation(), modifica(v))}>✏️</button>
             <button title="Scarica" onclick={(e) => (e.stopPropagation(), scarica(v))}>⬇</button>
@@ -273,4 +276,8 @@
 
 {#if editorPercorso}
   <EditorRemoto {id} percorso={editorPercorso} onChiudi={() => (editorPercorso = null)} />
+{/if}
+
+{#if anteprima}
+  <Anteprima {id} percorso={anteprima.percorso} nome={anteprima.nome} onChiudi={() => (anteprima = null)} />
 {/if}

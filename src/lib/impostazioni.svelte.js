@@ -12,6 +12,10 @@ const DEFAULT = {
   scrollback: 5000,
   broadcast: false, // invia l'input a tutte le schede contemporaneamente
   autoReconnect: true, // riconnetti automaticamente le sessioni cadute
+  temaApp: "scuro", // aspetto dell'interfaccia: scuro | chiaro
+  scalaUI: 100, // scala dell'interfaccia in percentuale
+  notifiche: true, // notifiche desktop (sessione caduta, trasferimenti)
+  ripristina: true, // riapri le ultime sessioni all'avvio
 };
 
 function carica() {

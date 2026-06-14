@@ -65,6 +65,7 @@ mod test {
             porta_seriale: None,
             baud: None,
             tags: vec!["a".into(), "b".into()],
+            comandi_avvio: None,
             jump_host: None,
             jump_porta: None,
             jump_utente: None,

@@ -12,6 +12,7 @@
   import * as api from "../lib/api.js";
   import { impostazioni } from "../lib/impostazioni.svelte.js";
   import { temi } from "../lib/temi.js";
+  import { notifica } from "../lib/notifiche.js";
 
   // Proprietà: dati del tab + callback verso App.
   // `invia` decide se mandare l'input solo a questa scheda o a tutte (broadcast).
@@ -54,6 +55,9 @@
       await listen(`term-chiuso-${tab.id}`, () => {
         term.write("\r\n\x1b[31m[sessione chiusa]\x1b[0m\r\n");
         onChiuso?.();
+        if (tab.tipo !== "locale" && !distrutto) {
+          notifica("Connessione persa", tab.nome);
+        }
         // Auto-riconnessione (non per il terminale locale, dove chiudere è voluto).
         if (impostazioni.autoReconnect && tab.tipo !== "locale" && !distrutto) {
           programmaRiconnessione();
@@ -124,6 +128,10 @@
       return true;
     });
     term.focus();
+    // Comandi automatici all'avvio (dopo un attimo, per far comparire il prompt).
+    if (tab.comandi_avvio) {
+      setTimeout(() => api.termScrivi(tab.id, tab.comandi_avvio + "\n"), 400);
+    }
   }
 
   // Ritenta la connessione fidandosi della chiave (chiamata da App dopo conferma).

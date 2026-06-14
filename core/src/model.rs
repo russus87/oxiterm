@@ -74,6 +74,9 @@ pub struct Sessione {
     /// Etichette libere per filtrare/organizzare le sessioni.
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Comandi da eseguire automaticamente appena connessi.
+    #[serde(default)]
+    pub comandi_avvio: Option<String>,
     /// Host intermedio (jump/bastion) opzionale, senza segreti.
     #[serde(default)]
     pub jump_host: Option<String>,
