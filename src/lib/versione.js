@@ -1,7 +1,14 @@
 // Versione dell'app e changelog, mostrati nel pannello Info.
-export const VERSIONE = "0.5.2";
+export const VERSIONE = "0.5.3";
 
 export const changelog = [
+  {
+    versione: "0.5.3",
+    note: [
+      "Fix: 'Connetti' non faceva nulla nel pacchetto (crypto.randomUUID assente nella webview)",
+      "Nuovo pulsante 'Salva' nel form: salva la sessione senza connettersi",
+    ],
+  },
   {
     versione: "0.5.2",
     note: [

@@ -5,6 +5,7 @@
   import { openPath } from "@tauri-apps/plugin-opener";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import * as api from "../lib/api.js";
+  import { nuovoId } from "../lib/id.js";
   import { aggiungi, completa } from "../lib/trasferimenti.svelte.js";
   import { segnalibri, aggiungi as aggSegnalibro, rimuovi as rimSegnalibro } from "../lib/segnalibri.svelte.js";
   import EditorRemoto from "./EditorRemoto.svelte";
@@ -82,7 +83,7 @@
   async function scarica(v) {
     const dest = await salvaFile({ defaultPath: v.nome });
     if (!dest) return;
-    const tid = crypto.randomUUID();
+    const tid = nuovoId();
     aggiungi(tid, v.nome, "giu");
     try {
       await api.sftpScaricaCoda(id, tid, unisci(percorso, v.nome), dest);
@@ -96,7 +97,7 @@
   // Carica un singolo file locale nella cartella corrente, con coda+progresso.
   async function caricaUno(sorgente) {
     const nome = sorgente.split(/[\\/]/).pop();
-    const tid = crypto.randomUUID();
+    const tid = nuovoId();
     aggiungi(tid, nome, "su");
     try {
       await api.sftpCaricaCoda(id, tid, sorgente, unisci(percorso, nome));
@@ -151,7 +152,7 @@
     const dir = await apriFile({ directory: true });
     if (!dir) return;
     const nome = dir.split(/[\\/]/).pop();
-    const tid = crypto.randomUUID();
+    const tid = nuovoId();
     aggiungi(tid, nome + "/", "su");
     try {
       await api.sftpCaricaCartella(id, dir, unisci(percorso, nome));
@@ -167,7 +168,7 @@
   async function scaricaCartella(v) {
     const dir = await apriFile({ directory: true });
     if (!dir) return;
-    const tid = crypto.randomUUID();
+    const tid = nuovoId();
     aggiungi(tid, v.nome + "/", "giu");
     try {
       await api.sftpScaricaCartella(id, unisci(percorso, v.nome), `${dir}/${v.nome}`);

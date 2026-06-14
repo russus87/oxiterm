@@ -2,6 +2,7 @@
   // Libreria di snippet/macro: comandi salvati da inviare al terminale attivo.
   import { onMount } from "svelte";
   import * as api from "../lib/api.js";
+  import { nuovoId } from "../lib/id.js";
 
   // `onInvia(comando)` invia il comando al terminale attivo. `attivoPresente`
   // dice se c'è una scheda aperta a cui inviare.
@@ -24,7 +25,7 @@
 
   async function aggiungi() {
     if (!nome || !comando) return;
-    await api.salvaSnippet({ id: crypto.randomUUID(), nome, comando });
+    await api.salvaSnippet({ id: nuovoId(), nome, comando });
     nome = "";
     comando = "";
     carica();

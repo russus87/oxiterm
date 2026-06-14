@@ -7,7 +7,7 @@
 
   // `iniziale` precompila il form (da una sessione salvata). `onConnetti` riceve
   // l'oggetto form; `onChiudi` chiude il modale.
-  let { iniziale = null, onConnetti, onChiudi } = $props();
+  let { iniziale = null, onConnetti, onSalva, onChiudi } = $props();
 
   let form = $state(iniziale ? { ...vuoto(), ...iniziale } : vuoto());
   let porteSeriali = $state([]);
@@ -254,6 +254,9 @@
 
     <div class="pulsanti">
       <button onclick={onChiudi}>Annulla</button>
+      <button onclick={() => onSalva(form)} disabled={!valido} title="Salva nella rubrica senza connettere">
+        Salva
+      </button>
       <button class="primario" onclick={() => onConnetti(form)} disabled={!valido}>
         Connetti
       </button>

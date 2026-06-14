@@ -5,6 +5,7 @@
   import { onMount } from "svelte";
   import { open as apriFile, save as salvaFile } from "@tauri-apps/plugin-dialog";
   import * as api from "./lib/api.js";
+  import { nuovoId } from "./lib/id.js";
   import { impostazioni } from "./lib/impostazioni.svelte.js";
   import Terminale from "./components/Terminale.svelte";
   import Sftp from "./components/Sftp.svelte";
@@ -150,6 +151,66 @@
     caricaSessioni();
   }
 
+  // Nome visualizzato di una sessione, dal form.
+  function nomeDi(form) {
+    return (
+      form.nome ||
+      (form.tipo === "ssh"
+        ? `${form.utente}@${form.host}`
+        : form.tipo === "telnet"
+          ? `telnet ${form.host}`
+          : form.tipo === "vnc"
+            ? `vnc ${form.host}`
+            : form.tipo === "seriale"
+              ? form.porta_seriale
+              : "locale")
+    );
+  }
+
+  // Salva una sessione nella rubrica (e la password nel vault, se richiesto).
+  // Restituisce l'id della sessione salvata.
+  async function salvaInRubrica(form) {
+    const idSessione = form.idSalvata || nuovoId();
+    const tags = (form.tags || "")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    await api.salvaSessione({
+      id: idSessione,
+      nome: nomeDi(form),
+      tipo: form.tipo,
+      host: form.host,
+      porta: Number(form.porta),
+      utente: form.utente,
+      chiave: form.metodo === "chiave" ? form.percorsoChiave : null,
+      gruppo: form.gruppo || null,
+      colore: form.colore || null,
+      porta_seriale: form.porta_seriale || null,
+      baud: form.tipo === "seriale" ? Number(form.baud) : null,
+      tags,
+      jump_host: form.usaJump ? form.jump_host : null,
+      jump_porta: form.usaJump ? Number(form.jump_porta) : null,
+      jump_utente: form.usaJump ? form.jump_utente : null,
+      jump_chiave:
+        form.usaJump && form.jump_metodo === "chiave" ? form.jump_chiave : null,
+    });
+    if (form.salvaVault && vault.sbloccato && form.password) {
+      await api.vaultSalvaPassword(idSessione, form.password).catch((e) => alert(e));
+    }
+    return idSessione;
+  }
+
+  // Salva senza connettere (utile per le sessioni che non si collegano).
+  async function salvaSolo(form) {
+    try {
+      await salvaInRubrica(form);
+      await caricaSessioni();
+      mostraForm = false;
+    } catch (e) {
+      alert(e);
+    }
+  }
+
   // Apre una nuova scheda a partire dal form di connessione.
   async function connetti(form) {
     const auth =
@@ -178,19 +239,9 @@
         }
       : null;
 
-    const nome =
-      form.nome ||
-      (form.tipo === "ssh"
-        ? `${form.utente}@${form.host}`
-        : form.tipo === "telnet"
-          ? `telnet ${form.host}`
-          : form.tipo === "vnc"
-            ? `vnc ${form.host}`
-            : form.tipo === "seriale"
-              ? form.porta_seriale
-              : "locale");
+    const nome = nomeDi(form);
 
-    const tid = crypto.randomUUID();
+    const tid = nuovoId();
     const tab = {
       id: tid,
       tipo: form.tipo,
@@ -210,34 +261,7 @@
     };
 
     if (form.salva) {
-      const idSessione = form.idSalvata || crypto.randomUUID();
-      const tags = (form.tags || "")
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
-      await api.salvaSessione({
-        id: idSessione,
-        nome,
-        tipo: form.tipo,
-        host: form.host,
-        porta: Number(form.porta),
-        utente: form.utente,
-        chiave: form.metodo === "chiave" ? form.percorsoChiave : null,
-        gruppo: form.gruppo || null,
-        colore: form.colore || null,
-        porta_seriale: form.porta_seriale || null,
-        baud: form.tipo === "seriale" ? Number(form.baud) : null,
-        tags,
-        jump_host: form.usaJump ? form.jump_host : null,
-        jump_porta: form.usaJump ? Number(form.jump_porta) : null,
-        jump_utente: form.usaJump ? form.jump_utente : null,
-        jump_chiave:
-          form.usaJump && form.jump_metodo === "chiave" ? form.jump_chiave : null,
-      });
-      // Salva la password nel vault cifrato, se richiesto e sbloccato.
-      if (form.salvaVault && vault.sbloccato && form.password) {
-        await api.vaultSalvaPassword(idSessione, form.password).catch((e) => alert(e));
-      }
+      await salvaInRubrica(form);
       caricaSessioni();
     }
 
@@ -263,7 +287,7 @@
   function split(direzione) {
     if (!tabAttivo || tabAttivo.panes.length >= 4) return;
     tabAttivo.layout = direzione;
-    tabAttivo.panes.push({ pid: crypto.randomUUID(), connesso: false, stato: "connessione" });
+    tabAttivo.panes.push({ pid: nuovoId(), connesso: false, stato: "connessione" });
   }
 
   // Chiude un singolo pannello di una scheda.
@@ -300,7 +324,7 @@
 
   // Apre una nuova scheda con gli stessi parametri di una esistente.
   function duplica(t) {
-    const nid = crypto.randomUUID();
+    const nid = nuovoId();
     const copia = {
       ...t,
       id: nid,
@@ -556,6 +580,7 @@
   <FormConnessione
     iniziale={formIniziale}
     onConnetti={connetti}
+    onSalva={salvaSolo}
     onChiudi={() => (mostraForm = false)}
   />
 {/if}
