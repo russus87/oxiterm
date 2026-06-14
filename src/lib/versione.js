@@ -1,7 +1,21 @@
 // Versione dell'app e changelog, mostrati nel pannello Info.
-export const VERSIONE = "0.5.3";
+export const VERSIONE = "0.6.0";
 
 export const changelog = [
+  {
+    versione: "0.6.0",
+    note: [
+      "Import da ~/.ssh/config",
+      "Quick connect (utente@host:porta)",
+      "Comandi automatici all'avvio della sessione",
+      "Anteprima file SFTP (testo e immagini)",
+      "Tema dell'interfaccia chiaro/scuro + scala UI",
+      "Notifiche desktop (sessione caduta, trasferimenti)",
+      "Riordino schede col drag e ripristino sessioni all'avvio",
+      "Segnalibri SFTP sincronizzati col cloud",
+      "Auto-aggiornamento (artefatti firmati sul repo pubblico oxiterm-dist)",
+    ],
+  },
   {
     versione: "0.5.3",
     note: [

@@ -1,6 +1,7 @@
 <script>
   // Pannello Info: versione, breve descrizione e changelog.
   import { VERSIONE, changelog } from "../lib/versione.js";
+  import { controllaAggiornamenti } from "../lib/aggiornamenti.js";
   let { onChiudi } = $props();
 </script>
 
@@ -24,6 +25,7 @@
     </div>
 
     <div class="pulsanti">
+      <button onclick={() => controllaAggiornamenti(false)}>Controlla aggiornamenti</button>
       <button class="primario" onclick={onChiudi}>Chiudi</button>
     </div>
   </div>

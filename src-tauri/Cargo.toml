@@ -1,6 +1,6 @@
 [package]
 name = "oxiterm"
-version = "0.5.3"
+version = "0.6.0"
 description = "Oxiterm - terminale SSH/SFTP a schede"
 authors = ["Antonio Russo"]
 license = "MIT"
@@ -24,6 +24,8 @@ tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 # La logica vera (SSH/SFTP) vive nel crate "core".
 oxiterm-core = { path = "../core" }
 # Per i canali e i Mutex asincroni usati nello stato condiviso.

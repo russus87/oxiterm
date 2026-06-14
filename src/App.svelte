@@ -8,6 +8,7 @@
   import { nuovoId } from "./lib/id.js";
   import { impostazioni } from "./lib/impostazioni.svelte.js";
   import { caricaSegnalibri } from "./lib/segnalibri.svelte.js";
+  import { controllaAggiornamenti } from "./lib/aggiornamenti.js";
   import Terminale from "./components/Terminale.svelte";
   import Sftp from "./components/Sftp.svelte";
   import FormConnessione from "./components/FormConnessione.svelte";
@@ -72,6 +73,7 @@
     await aggiornaVault();
     await caricaSegnalibri();
     if (impostazioni.ripristina) ripristinaSessioni();
+    controllaAggiornamenti(true); // controllo silenzioso all'avvio
   });
 
   // Applica tema e scala dell'interfaccia a caldo.
